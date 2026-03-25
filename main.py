@@ -154,6 +154,7 @@ async def upload_file(
         id=db_file.file_id,
         filename=db_file.filename,
         size=db_file.size,
+        path = db_file.path
     )
 
 
@@ -193,6 +194,7 @@ def list_files(
             user_id=f.user_id,
             filename=f.filename,
             size=f.size,
+            path = f.path,
             created_at=f.created_at,
         )
         for f in file_records

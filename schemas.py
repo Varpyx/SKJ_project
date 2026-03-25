@@ -27,6 +27,7 @@ class FileUploadResponse(BaseModel):
     id: str           # UUID souboru (file_id)
     filename: str     # původní název souboru
     size: int         # velikost v bytech
+    path: str         # cesta k souboru
 
     class Config:
         # orm_mode=True umožňuje vytvořit schéma přímo z SQLAlchemy objektu:
@@ -46,6 +47,7 @@ class FileMetadata(BaseModel):
     id: str              # UUID souboru
     user_id: str         # vlastník souboru
     filename: str        # název souboru
+    path: str            # cesta k souboru
     size: int            # velikost v bytech
     created_at: datetime # čas nahrání
 
