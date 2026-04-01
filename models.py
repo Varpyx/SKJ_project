@@ -3,11 +3,17 @@ models.py – SQLAlchemy ORM modely (= databázové tabulky)
 
 Každá třída reprezentuje jednu tabulku v databázi.
 Atributy třídy odpovídají sloupcům tabulky.
+
+Používáme moderní SQLAlchemy 2.0 styl s Mapped[] a mapped_column():
+  - Mapped[str]        → sloupec NOT NULL (nullable=False automaticky)
+  - Mapped[str | None] → sloupec povolující NULL (nullable=True automaticky)
+  - Datový typ (String, Integer...) SQLAlchemy odvodí z Python anotace
 """
 
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Integer, String
+from sqlalchemy import String
+from sqlalchemy.orm import Mapped, mapped_column
 
 from database import Base
 
@@ -30,29 +36,32 @@ class File(Base):
     __tablename__ = "files"  # název tabulky v SQLite
 
     # Primární klíč – interní ID (autoincrement)
-    id = Column(Integer, primary_key=True, index=True)
+    # int → SQLAlchemy automaticky použije Integer; primary_key implikuje NOT NULL
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
 
     # Veřejný identifikátor souboru – UUID4 jako string (např. "a3f2...")
-    # index=True urychlí vyhledávání podle tohoto sloupce
-    # unique=True zabraňuje duplicitním záznamům
-    file_id = Column(String, unique=True, index=True, nullable=False)
+    # Mapped[str] → nullable=False automaticky (není potřeba psát explicitně)
+    # String bez délky = VARCHAR bez limitu (vhodné pro SQLite; u PostgreSQL zvažte délku)
+    file_id: Mapped[str] = mapped_column(String, unique=True, index=True)
 
     # ID uživatele – odděluje soubory různých uživatelů
-    user_id = Column(String, index=True, nullable=False)
+    user_id: Mapped[str] = mapped_column(String, index=True)
 
     # Původní název souboru (např. "report.pdf")
-    filename = Column(String, nullable=False)
+    filename: Mapped[str] = mapped_column(String)
 
     # Cesta k souboru na disku (např. "storage/user123/abc-uuid")
-    path = Column(String, nullable=False)
+    path: Mapped[str] = mapped_column(String)
 
     # Velikost souboru v bytech
-    size = Column(Integer, nullable=False)
+    # int → SQLAlchemy automaticky použije Integer
+    size: Mapped[int] = mapped_column()
 
     # Čas nahrání – default=datetime.utcnow se zavolá při každém novém záznamu
-    created_at = Column(DateTime, default=datetime.utcnow)
+    # Mapped[datetime] → SQLAlchemy automaticky použije DateTime
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Textová reprezentace objektu – užitečné při debugování."""
         return (
             f"<File id={self.file_id!r} user={self.user_id!r} "

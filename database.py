@@ -7,8 +7,7 @@ pracujeme s Python objekty (třídami).
 """
 
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 # ---------------------------------------------------------------------------
 # Připojovací řetězec (connection string)
@@ -27,6 +26,7 @@ DATABASE_URL = "sqlite:///./storage.db"
 engine = create_engine(
     DATABASE_URL,
     connect_args={"check_same_thread": False},
+    echo=True,  
 )
 
 # ---------------------------------------------------------------------------
@@ -42,10 +42,12 @@ SessionLocal = sessionmaker(
 )
 
 # ---------------------------------------------------------------------------
-# Deklarativní základní třída pro modely
+# Deklarativní základní třída pro modely (SQLAlchemy 2.0 styl)
 # ---------------------------------------------------------------------------
-# Všechny naše DB modely (tabulky) dědí z Base.
-Base = declarative_base()
+# Nový způsob: místo declarative_base() dědíme z DeclarativeBase.
+# Výhoda: plná podpora typed mapped_column a lepší integrace s type-checkery.
+class Base(DeclarativeBase):
+    pass
 
 
 # ---------------------------------------------------------------------------
