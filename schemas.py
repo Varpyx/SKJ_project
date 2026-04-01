@@ -12,7 +12,7 @@ Pydantic schéma = tvar dat na API rozhraní.
 from datetime import datetime
 from typing import List
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # ---------------------------------------------------------------------------
@@ -24,15 +24,21 @@ class FileUploadResponse(BaseModel):
     Obsahuje základní metadata nově nahraného souboru.
     """
 
-    id: str           # UUID souboru (file_id)
-    filename: str     # původní název souboru
-    size: int         # velikost v bytech
-    path: str         # cesta k souboru
+    # ... znamená povinné pole – server musí vždy vrátit ID souboru
+    id: str = Field(..., description="UUID souboru")
 
-    class Config:
-        # orm_mode=True umožňuje vytvořit schéma přímo z SQLAlchemy objektu:
-        # FileUploadResponse.from_orm(db_file_object)
-        from_attributes = True
+    # ... znamená povinné pole – název souboru musí být vždy znám
+    filename: str = Field(..., description="Původní název souboru")
+
+    # gt=0 (greater than) – velikost musí být kladné číslo, prázdný soubor nedává smysl
+    size: int = Field(..., description="Velikost souboru v bytech", gt=0)
+
+    # ... znamená povinné pole – cesta musí být vždy uložena pro pozdější přístup
+    path: str = Field(..., description="Cesta k souboru na disku")
+
+    # from_attributes=True umožňuje vytvořit schéma přímo z SQLAlchemy objektu:
+    # FileUploadResponse.model_validate(db_file_object)
+    model_config = {"from_attributes": True}
 
 
 # ---------------------------------------------------------------------------
@@ -44,15 +50,27 @@ class FileMetadata(BaseModel):
     Obsahuje všechna metadata uložená v databázi.
     """
 
-    id: str              # UUID souboru
-    user_id: str         # vlastník souboru
-    filename: str        # název souboru
-    path: str            # cesta k souboru
-    size: int            # velikost v bytech
-    created_at: datetime # čas nahrání
+    # ... znamená povinné pole – UUID jednoznačně identifikuje soubor
+    id: str = Field(..., description="UUID souboru")
 
-    class Config:
-        from_attributes = True
+    # ... znamená povinné pole – každý soubor musí mít vlastníka
+    user_id: str = Field(..., description="Vlastník souboru")
+
+    # ... znamená povinné pole – název souboru musí být vždy znám
+    filename: str = Field(..., description="Název souboru")
+
+    # ... znamená povinné pole – cesta nutná pro stažení souboru
+    path: str = Field(..., description="Cesta k souboru na disku")
+
+    # gt=0 (greater than) – velikost musí být kladné číslo, prázdný soubor nedává smysl
+    size: int = Field(..., description="Velikost v bytech", gt=0)
+
+    # ... znamená povinné pole – čas nahrání je vždy nastaven databází
+    created_at: datetime = Field(..., description="Čas nahrání")
+
+    # from_attributes=True umožňuje vytvořit schéma přímo z SQLAlchemy objektu:
+    # FileMetadata.model_validate(db_file_object)
+    model_config = {"from_attributes": True}
 
 
 # ---------------------------------------------------------------------------
@@ -63,8 +81,12 @@ class FileListResponse(BaseModel):
     Odpověď na GET /files – seznam metadat souborů.
     """
 
-    files: List[FileMetadata]
-    total: int  # celkový počet souborů daného uživatele
+    # ... znamená povinné pole – seznam musí být vždy přítomen (i když prázdný)
+    files: List[FileMetadata] = Field(..., description="Seznam souborů uživatele")
+
+    # ge=0 (greater or equal) – počet souborů může být 0 (uživatel nic nenahrál)
+    # na rozdíl od size zde nula smysl dává
+    total: int = Field(..., description="Celkový počet souborů", ge=0)
 
 
 # ---------------------------------------------------------------------------
@@ -75,5 +97,8 @@ class DeleteResponse(BaseModel):
     Vráceno po úspěšném DELETE /files/{id}.
     """
 
-    message: str  # textové potvrzení (např. "File deleted successfully")
-    id: str       # UUID smazaného souboru
+    # ... znamená povinné pole – textové potvrzení musí být vždy vráceno
+    message: str = Field(..., description="Potvrzení smazání")
+
+    # ... znamená povinné pole – klient musí vědět, které ID bylo smazáno
+    id: str = Field(..., description="UUID smazaného souboru")
