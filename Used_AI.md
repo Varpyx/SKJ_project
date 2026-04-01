@@ -4,18 +4,22 @@
 Při řešení této úlohy jsme využili následující nástroje:
 
 * **Claude AI** - hlavní kostra aplikace
-* **Gemini** - odladění bugu a chyb
 
 ## Příklady promptů
-* *"Mame tohle zadání, projdi ho a rozmysli si jak bys ho zpracoval"*
-* *"Vytvoř toto zadání jako kod, který si jednoduše spustím"*
-* *"Proč mi nejde zobrazit localhost stránka?"*
-* *"Důkladně popiš funkčnost a zaměř se na problemy"*
+* *"Vysvětli mi knihovny pydantic"*
+* *"Proč mi nefunguje validace dat?"*
+* *"Jaký je rozdíl mezi běžným Python dict a Pydantic BaseModel?"*
+* *"Uprav existující Pydantic model tak, aby validoval všechna data"*
+* *"Jak funguje Field a jaké má parametry?"*
+
 
 ## Co AI vygenerovala správně
-* **Kompletně funkční struktura:** Claude AI na první prompt dokazal vygenerovat funčkní program, vygeneroval i requirements.txt pro jednoduché lokální nasazení.
+* **Správný kod pro checkování dat**
+* **Rozšíření aplikace o nové funkce v databázi**
+* **Rozdělení kodu do souborů a udržení čístého kodu s komentáři**
 
 
 ## Jaké chyby AI udělala a co bylo nutné opravit
-* **Špatná verze databáze:** Zadal původně špatnou verzi SQLAlchemy do requirements.txt - bylo nutné stáhnout novější verzi, poté již vše funkční
+* **Špatně napsané validátory** - původně použil starý styl (z Pydantic v2) - na druhý prompt již věděl kde je chyba
+* **Zapomněl na užití Field** - po připomenutí ho doplnil
 
