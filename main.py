@@ -29,6 +29,7 @@ import schemas
 import storage
 from database import Base, engine, get_db
 
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB v bytech
 # ---------------------------------------------------------------------------
 # Inicializace databáze
 # ---------------------------------------------------------------------------
@@ -129,6 +130,13 @@ async def upload_file(
 
     # 2) Vygeneruj unikátní ID pro tento soubor
     file_id = storage.generate_file_id()
+
+    # 2. KONTROLA: Není soubor příliš velký?
+    if len(file_content) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=413,  # 413 Payload Too Large je správný HTTP kód pro tuto chybu
+            detail=f"Soubor je příliš velký. Maximální povolená velikost je {MAX_FILE_SIZE / 1024 / 1024} MB."
+        )
 
     # 3) Ulož soubor fyzicky na disk (asynchronně)
     file_path, file_size = await storage.save_file(
