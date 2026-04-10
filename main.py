@@ -20,9 +20,10 @@ Architektura:
 
 from typing import Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException, UploadFile, File as FastAPIFile
+from fastapi import Depends, FastAPI, Header, HTTPException, UploadFile, File as FastAPIFile, Form
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 import models
 import schemas
@@ -33,9 +34,6 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB v bytech
 # ---------------------------------------------------------------------------
 # Inicializace databáze
 # ---------------------------------------------------------------------------
-# Při startu aplikace vytvoří všechny tabulky definované v models.py,
-# pokud ještě neexistují. (Ekvivalent CREATE TABLE IF NOT EXISTS)
-Base.metadata.create_all(bind=engine)
 
 # ---------------------------------------------------------------------------
 # FastAPI aplikace
@@ -100,6 +98,7 @@ def get_file_or_404(file_id: str, user_id: str, db: Session) -> models.File:
 )
 async def upload_file(
     file: UploadFile = FastAPIFile(..., description="Soubor k nahrání (multipart/form-data)"),
+    bucket_id: int = Form(..., description="ID bucketu, do kterého se má soubor nahrát"),
     x_user_id: Optional[str] = Header(default="anonymous", description="ID uživatele"),
     db: Session = Depends(get_db),
 ):
@@ -120,6 +119,10 @@ async def upload_file(
     5. Uložíme metadata do SQLite databáze
     6. Vrátíme odpověď s metadaty
     """
+    # 0) KONTROLA BUCKETU - Musíme ověřit, jestli cílový bucket vůbec existuje
+    bucket = db.query(models.Bucket).filter(models.Bucket.id == bucket_id).first()
+    if not bucket:
+        raise HTTPException(status_code=404, detail=f"Cílový bucket s ID {bucket_id} neexistuje.")
     # 1) Přečti celý obsah souboru do paměti (jako bytes)
     # Pro velmi velké soubory bychom četli po částech (streaming), ale
     # pro účely tohoto projektu je přečtení celého souboru v pořádku.
@@ -149,6 +152,7 @@ async def upload_file(
     db_file = models.File(
         file_id=file_id,
         user_id=x_user_id,
+        bucket_id=bucket_id,  # <-- Propojení souboru s bucketem!
         filename=file.filename or "unnamed",
         path=file_path,
         size=file_size,
@@ -329,3 +333,77 @@ def health_check():
     Používá se pro monitoring a load balancery.
     """
     return {"status": "ok", "service": "object-storage"}
+
+
+# ===========================================================================
+# ENDPOINTY PRO BUCKETY
+# ===========================================================================
+
+@app.post(
+    "/buckets/",
+    response_model=schemas.BucketResponse,
+    status_code=201,
+    summary="Vytvoř nový bucket",
+    tags=["buckets"],
+)
+def create_bucket(
+        bucket_in: schemas.BucketCreate,
+        db: Session = Depends(get_db)
+):
+    """Vytvoří nový bucket. Název musí být unikátní."""
+    db_bucket = models.Bucket(name=bucket_in.name)
+    db.add(db_bucket)
+
+    try:
+        db.commit()
+        db.refresh(db_bucket)
+        return db_bucket
+    except IntegrityError:
+        # Odchycení chyby, pokud by unikátní název (unique=True) už existoval
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail=f"Bucket s názvem '{bucket_in.name}' již existuje."
+        )
+
+@app.get(
+    "/buckets/{bucket_id}/objects/",
+    response_model=schemas.FileListResponse,
+    summary="Vypiš objekty v bucketu",
+    tags=["buckets"],
+)
+def list_bucket_objects(
+        bucket_id: int,
+        db: Session = Depends(get_db)
+):
+    """Vrátí seznam všech souborů, které patří do daného bucketu."""
+    # 1. Nejprve ověříme, zda bucket vůbec existuje
+    bucket = db.query(models.Bucket).filter(models.Bucket.id == bucket_id).first()
+    if not bucket:
+        raise HTTPException(status_code=404, detail="Bucket nebyl nalezen.")
+
+    # 2. Vytáhneme všechny soubory spojené s tímto bucketem
+    file_records = (
+        db.query(models.File)
+        .filter(models.File.bucket_id == bucket_id)
+        .order_by(models.File.created_at.desc())
+        .all()
+    )
+
+    # Převedeme na Pydantic schémata pro odpověď (využijeme tvůj existující FileMetadata)
+    files_metadata = [
+        schemas.FileMetadata(
+            id=f.file_id,
+            user_id=f.user_id,
+            filename=f.filename,
+            size=f.size,
+            path=f.path,
+            created_at=f.created_at,
+        )
+        for f in file_records
+    ]
+
+    return schemas.FileListResponse(
+        files=files_metadata,
+        total=len(files_metadata),
+    )

@@ -15,6 +15,25 @@ from typing import List
 from pydantic import BaseModel, Field
 
 
+# Buckety
+class BucketCreate(BaseModel):
+    """Schéma pro vytvoření nového bucketu."""
+    name: str = Field(
+        ...,
+        description="Název bucketu",
+        min_length=3,
+        max_length=63,
+        pattern=r"^[a-z0-9.-]+$" # Pouze malá písmena, čísla, tečky a pomlčky
+    )
+
+class BucketResponse(BaseModel):
+    """Schéma pro odpověď s metadaty bucketu."""
+    id: int = Field(..., description="Interní ID bucketu")
+    name: str = Field(..., description="Název bucketu")
+    created_at: datetime = Field(..., description="Čas vytvoření")
+
+    model_config = {"from_attributes": True}
+
 # ---------------------------------------------------------------------------
 # Schéma pro odpověď po úspěšném nahrání souboru
 # ---------------------------------------------------------------------------

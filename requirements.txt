@@ -26,3 +26,4 @@ sqlalchemy>=2.0.35        # ORM – objektový přístup k relační databázi
 # Poznámka: SQLite je součástí standardní Python knihovny,
 # není třeba instalovat extra driver.
 # Pro PostgreSQL bychom přidali: psycopg2-binary==2.9.9
+alembic>=1.13.0   # Nástroj pro databázové migrace
