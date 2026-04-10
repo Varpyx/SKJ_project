@@ -15,6 +15,25 @@ from typing import List
 from pydantic import BaseModel, Field
 
 
+# Buckety
+class BucketCreate(BaseModel):
+    """Schéma pro vytvoření nového bucketu."""
+    name: str = Field(
+        ...,
+        description="Název bucketu",
+        min_length=3,
+        max_length=63,
+        pattern=r"^[a-z0-9.-]+$" # Pouze malá písmena, čísla, tečky a pomlčky
+    )
+
+class BucketResponse(BaseModel):
+    """Schéma pro odpověď s metadaty bucketu."""
+    id: int = Field(..., description="Interní ID bucketu")
+    name: str = Field(..., description="Název bucketu")
+    created_at: datetime = Field(..., description="Čas vytvoření")
+
+    model_config = {"from_attributes": True}
+
 # ---------------------------------------------------------------------------
 # Schéma pro odpověď po úspěšném nahrání souboru
 # ---------------------------------------------------------------------------
@@ -28,10 +47,16 @@ class FileUploadResponse(BaseModel):
     id: str = Field(..., description="UUID souboru")
 
     # ... znamená povinné pole – název souboru musí být vždy znám
-    filename: str = Field(..., description="Původní název souboru")
+    filename: str = Field(
+        ...,
+        description="Původní název souboru",
+        min_length=1,
+        max_length=255,
+        pattern=r"^[\w\-. ]+$"
+    )
 
     # gt=0 (greater than) – velikost musí být kladné číslo, prázdný soubor nedává smysl
-    size: int = Field(..., description="Velikost souboru v bytech", gt=0)
+    size: int = Field(..., description="Velikost souboru v bytech", gt=0, le=10_485_760)
 
     # ... znamená povinné pole – cesta musí být vždy uložena pro pozdější přístup
     path: str = Field(..., description="Cesta k souboru na disku")
@@ -53,17 +78,31 @@ class FileMetadata(BaseModel):
     # ... znamená povinné pole – UUID jednoznačně identifikuje soubor
     id: str = Field(..., description="UUID souboru")
 
-    # ... znamená povinné pole – každý soubor musí mít vlastníka
-    user_id: str = Field(..., description="Vlastník souboru")
+    # user_id používáme k tvorbě složek na disku, musí být extrémně bezpečné!
+    # Povolíme jen písmena, čísla, podtržítka a pomlčky. Žádné mezery a lomenítka.
+    user_id: str = Field(
+        ...,
+        description="Vlastník souboru",
+        min_length=3,
+        max_length=50,
+        pattern=r"^[a-zA-Z0-9_-]+$"
+    )
 
     # ... znamená povinné pole – název souboru musí být vždy znám
-    filename: str = Field(..., description="Název souboru")
+    filename: str = Field(
+        ...,
+        description="Název souboru",
+        min_length=1,
+        max_length=255,
+        pattern=r"^[\w\-. ]+$"
+    )
 
     # ... znamená povinné pole – cesta nutná pro stažení souboru
     path: str = Field(..., description="Cesta k souboru na disku")
 
     # gt=0 (greater than) – velikost musí být kladné číslo, prázdný soubor nedává smysl
-    size: int = Field(..., description="Velikost v bytech", gt=0)
+    # Přidáno 'le' pro maximální velikost (10 MB)
+    size: int = Field(..., description="Velikost souboru v bytech", gt=0, le=10_485_760)
 
     # ... znamená povinné pole – čas nahrání je vždy nastaven databází
     created_at: datetime = Field(..., description="Čas nahrání")
