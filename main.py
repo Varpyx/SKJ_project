@@ -158,6 +158,7 @@ async def upload_file(
         size=file_size,
     )
     db.add(db_file)      # přidej objekt do session (zatím jen v paměti)
+    bucket.bandwidth_bytes += file_size # pro kontrolu bandwith
     db.commit()          # zapiš do databáze (trvalé uložení)
     db.refresh(db_file)  # načti zpět aktualizovaná data (např. created_at)
 
@@ -263,6 +264,13 @@ async def download_file(
     # 3) Vrať soubor jako HTTP response
     # Content-Disposition: attachment → prohlížeč nabídne stažení (ne zobrazení)
     # filename= → navrhovaný název souboru při stažení
+    #
+    if file_record.bucket_id:
+        bucket = db.query(models.Bucket).filter(models.Bucket.id == file_record.bucket_id).first()
+        if bucket:
+            bucket.bandwidth_bytes += file_record.size
+            db.commit()
+    # 
     return Response(
         content=file_content,
         media_type="application/octet-stream",  # generický binární typ
@@ -407,3 +415,12 @@ def list_bucket_objects(
         files=files_metadata,
         total=len(files_metadata),
     )
+
+# pridan billing bucket
+@app.get("/buckets/{bucket_id}/billing/",
+          response_model=schemas.BucketBillingResponse)
+def get_bucket_billing(bucket_id: int, db: Session = Depends(get_db)):
+    bucket = db.query(models.Bucket).filter(models.Bucket.id == bucket_id).first()
+    if not bucket:
+        raise HTTPException(status_code=404, detail="Bucket nebyl nalezen.")
+    return schemas.BucketBillingResponse(bucket_id=bucket.id, bandwidth_bytes=bucket.bandwidth_bytes)

@@ -24,7 +24,7 @@ class Bucket(Base):
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String, unique=True, index=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-
+    bandwidth_bytes: Mapped[int] = mapped_column(default=0)
     # Vztah: Jeden bucket může obsahovat více souborů
     files: Mapped[list["File"]] = relationship(back_populates="bucket", cascade="all, delete-orphan")
 

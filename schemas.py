@@ -34,6 +34,10 @@ class BucketResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
+# Billing bucket
+class BucketBillingResponse(BaseModel):
+    bucket_id: int
+    bandwidth_bytes: int
 # ---------------------------------------------------------------------------
 # Schéma pro odpověď po úspěšném nahrání souboru
 # ---------------------------------------------------------------------------

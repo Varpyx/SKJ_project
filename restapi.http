@@ -1,0 +1,24 @@
+### 1. Vytvoř bucket
+POST http://localhost:8000/buckets/
+Content-Type: application/json
+
+{
+    "name": "bandwith-bucket"
+}
+### 2. Nahraj soubor do bucketu (zvýší bandwidth o velikost souboru)
+POST http://localhost:8000/files/upload
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary
+------WebKitFormBoundary
+Content-Disposition: form-data; name="file"; filename="requirements.txt"
+Content-Type: text/plain
+Hello World!
+------WebKitFormBoundary
+Content-Disposition: form-data; name="bucket_id"
+1
+------WebKitFormBoundary--
+### 3. Zobraz billing po uploadu
+GET http://localhost:8000/buckets/1/billing/
+### 4. Stáhni soubor (zvýší bandwidth o velikost souboru)
+GET http://localhost:8000/files/{file_id_z_minuleho_kroku}
+### 5. Zobraz billing po downloadu (bandwidth by měl být 2x)
+GET http://localhost:8000/buckets/1/billing/
