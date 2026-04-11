@@ -3,23 +3,19 @@
 ## Jaké nástroje AI byly použity
 Při řešení této úlohy jsme využili následující nástroje:
 
+* **Gemini** - setupnutí 1. ukolu
 * **Claude AI** - hlavní kostra aplikace
 
 ## Příklady promptů
-* *"Vysvětli mi knihovny pydantic"*
-* *"Proč mi nefunguje validace dat?"*
-* *"Jaký je rozdíl mezi běžným Python dict a Pydantic BaseModel?"*
-* *"Uprav existující Pydantic model tak, aby validoval všechna data"*
-* *"Jak funguje Field a jaké má parametry?"*
+* *"Jak pracovat s alembic?"*
+* *"Proč alembic upgrade head vrací tuto chybu?"*
 
 
 ## Co AI vygenerovala správně
-* **Správný kod pro checkování dat**
-* **Rozšíření aplikace o nové funkce v databázi**
-* **Rozdělení kodu do souborů a udržení čístého kodu s komentáři**
+* **Správný kod pro bucket**
+* **2 nove endpointy pro vytvoření a vypis filu v bucketu**
 
 
 ## Jaké chyby AI udělala a co bylo nutné opravit
-* **Špatně napsané validátory** - původně použil starý styl (z Pydantic v2) - na druhý prompt již věděl kde je chyba
-* **Zapomněl na užití Field** - po připomenutí ho doplnil
+* **Neřekl mi že musíme smazat puvodní db aby alempic fungoval**
 

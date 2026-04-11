@@ -12,11 +12,24 @@ Používáme moderní SQLAlchemy 2.0 styl s Mapped[] a mapped_column():
 
 from datetime import datetime
 
-from sqlalchemy import String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import String, ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
 
+class Bucket(Base):
+    """Tabulka pro ukládání S3 bucketů (složek)."""
+    __tablename__ = "buckets"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String, unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+
+    # Vztah: Jeden bucket může obsahovat více souborů
+    files: Mapped[list["File"]] = relationship(back_populates="bucket", cascade="all, delete-orphan")
+
+    def __repr__(self) -> str:
+        return f"<Bucket id={self.id} name={self.name!r}>"
 
 class File(Base):
     """
@@ -38,6 +51,12 @@ class File(Base):
     # Primární klíč – interní ID (autoincrement)
     # int → SQLAlchemy automaticky použije Integer; primary_key implikuje NOT NULL
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
+
+    # Nový sloupec: Odkaz na bucket (cizí klíč)
+    bucket_id: Mapped[int | None] = mapped_column(ForeignKey("buckets.id"))
+
+    # Vztah: Zpětná vazba na objekt Bucket
+    bucket: Mapped["Bucket"] = relationship(back_populates="files")
 
     # Veřejný identifikátor souboru – UUID4 jako string (např. "a3f2...")
     # Mapped[str] → nullable=False automaticky (není potřeba psát explicitně)
