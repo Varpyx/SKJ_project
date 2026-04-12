@@ -15,6 +15,15 @@ uvicorn main:app --reload --port 8000
 
 # 3. Otevři dokumentaci
 # http://localhost:8000/docs
+
+# 4. Testování pomocí HTTP souboru (volitelně)
+
+Místo curl nebo /docs můžeš použít soubor `test.http`:
+
+- **VS Code:** Nainstaluj rozšíření "REST Client" (humao.rest-client)
+- **JetBrains:** Použij vestavěný HTTP Client
+
+Otevři `test.http` v editoru a klikni na "Send Request" nad každou sekcí.
 ```
 
 ---
