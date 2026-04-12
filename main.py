@@ -100,6 +100,7 @@ async def upload_file(
     file: UploadFile = FastAPIFile(..., description="Soubor k nahrání (multipart/form-data)"),
     bucket_id: int = Form(..., description="ID bucketu, do kterého se má soubor nahrát"),
     x_user_id: Optional[str] = Header(default="anonymous", description="ID uživatele"),
+    x_internal_source: Optional[str] = Header(default=None, description="Pokud true, počítá se jako interní transfer"),
     db: Session = Depends(get_db),
 ):
     """
@@ -158,7 +159,11 @@ async def upload_file(
         size=file_size,
     )
     db.add(db_file)      # přidej objekt do session (zatím jen v paměti)
-    bucket.bandwidth_bytes += file_size # pro kontrolu bandwith
+    bucket.current_storage_bytes += file_size
+    if x_internal_source == "true":
+        bucket.internal_transfer_bytes += file_size
+    else:
+        bucket.ingress_bytes += file_size
     db.commit()          # zapiš do databáze (trvalé uložení)
     db.refresh(db_file)  # načti zpět aktualizovaná data (např. created_at)
 
@@ -234,6 +239,7 @@ def list_files(
 async def download_file(
     file_id: str,
     x_user_id: Optional[str] = Header(default="anonymous", description="ID uživatele"),
+    x_internal_source: Optional[str] = Header(default=None, description="Pokud true, počítá se jako interní transfer"),
     db: Session = Depends(get_db),
 ):
     """
@@ -268,7 +274,10 @@ async def download_file(
     if file_record.bucket_id:
         bucket = db.query(models.Bucket).filter(models.Bucket.id == file_record.bucket_id).first()
         if bucket:
-            bucket.bandwidth_bytes += file_record.size
+            if x_internal_source == "true":
+                bucket.internal_transfer_bytes += file_record.size
+            else:
+                bucket.egress_bytes += file_record.size
             db.commit()
     # 
     return Response(
@@ -321,7 +330,13 @@ def delete_file(
         # (chceme alespoň vyčistit DB záznam)
         print(f"VAROVÁNÍ: Soubor {file_record.path} nebyl nalezen na disku.")
 
-    # 3) Odstraň záznam z databáze
+    # 3) Sníž storage_bytes v bucketu
+    if file_record.bucket_id:
+        bucket = db.query(models.Bucket).filter(models.Bucket.id == file_record.bucket_id).first()
+        if bucket:
+            bucket.current_storage_bytes -= file_record.size
+
+    # 4) Odstraň záznam z databáze
     db.delete(file_record)
     db.commit()
 
@@ -423,4 +438,10 @@ def get_bucket_billing(bucket_id: int, db: Session = Depends(get_db)):
     bucket = db.query(models.Bucket).filter(models.Bucket.id == bucket_id).first()
     if not bucket:
         raise HTTPException(status_code=404, detail="Bucket nebyl nalezen.")
-    return schemas.BucketBillingResponse(bucket_id=bucket.id, bandwidth_bytes=bucket.bandwidth_bytes)
+    return schemas.BucketBillingResponse(
+        bucket_id=bucket.id,
+        current_storage_bytes=bucket.current_storage_bytes,
+        ingress_bytes=bucket.ingress_bytes,
+        egress_bytes=bucket.egress_bytes,
+        internal_transfer_bytes=bucket.internal_transfer_bytes
+    )

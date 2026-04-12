@@ -1,30 +1,63 @@
+# POZNÁMKA: Bucket čísla v tomto souboru jsou příkladová - uprav je podle skutečných ID v DB!
+
 ### 1. Vytvoř bucket
 POST http://localhost:8000/buckets/
-#X-User-id: -- alice volitelny atribut defaultne anonymous
 Content-Type: application/json
-{
-    "name": "bandwith-bucket"
-}
-### 2. Nahraj soubor do bucketu (zvýší bandwidth o velikost souboru) #! uloz id daneho souboru pro jeho vypis !#
-POST http://localhost:8000/files/upload
-Content-Type: multipart/form-data; boundary=----WebKitFormBoundary
 
-------WebKitFormBoundary
+{
+    "name": "bucket-john"
+}
+
+### 2. Nahraj soubor (john -> bucket 1)
+POST http://localhost:8000/files/upload
+X-User-Id: john
+Content-Type: multipart/form-data; boundary=boundary
+
+--boundary
 Content-Disposition: form-data; name="file"; filename="test_file.txt"
 Content-Type: text/plain
 
 < ./test_file.txt
-------WebKitFormBoundary
+--boundary
 Content-Disposition: form-data; name="bucket_id"
 
 1
-------WebKitFormBoundary--
-### 3. Zobraz billing po uploadu
+--boundary--
+
+### 3. Zobraz billing
 GET http://localhost:8000/buckets/1/billing/
-### 4. Stáhni soubor (zvýší bandwidth o velikost souboru) 
-##nutno zmenit id souboru
-GET http://localhost:8000/files/c67ecc26-7bb0-4ee3-8100-ec468243f72f
-### 5. Zobraz billing po downloadu (bandwidth by měl být 2x)
+
+### 4. Stáhni soubor.
+# pokud byl soubor nahran s User-Id, je nutne
+# tento atribut pouzit i pro stahovani jeho souboru 
+GET http://localhost:8000/files/3c26e514-66e7-4c96-acae-7d6ada035e62
+X-User-Id: john
+
+### 5. Zobraz billing po downloadu
 GET http://localhost:8000/buckets/1/billing/
-### 6. Zobraz seznam souborů v bucketu
-GET http://localhost:8000/buckets/1/objects/
+
+### 6. Smaž soubor
+DELETE http://localhost:8000/files/3c26e514-66e7-4c96-acae-7d6ada035e62
+X-User-Id: john
+
+### 7. Zobraz billing po smazání
+GET http://localhost:8000/buckets/1/billing/
+
+### 8. Test interní transfer
+POST http://localhost:8000/files/upload
+X-User-Id: john
+X-Internal-Source: true
+Content-Type: multipart/form-data; boundary=boundary
+
+--boundary
+Content-Disposition: form-data; name="file"; filename="test_file.txt"
+Content-Type: text/plain
+
+< ./test_file.txt
+--boundary
+Content-Disposition: form-data; name="bucket_id"
+
+1
+--boundary--
+
+GET http://localhost:8000/buckets/1/billing/

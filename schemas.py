@@ -37,7 +37,10 @@ class BucketResponse(BaseModel):
 # Billing bucket
 class BucketBillingResponse(BaseModel):
     bucket_id: int
-    bandwidth_bytes: int
+    current_storage_bytes: int
+    ingress_bytes: int
+    egress_bytes: int
+    internal_transfer_bytes: int
 # ---------------------------------------------------------------------------
 # Schéma pro odpověď po úspěšném nahrání souboru
 # ---------------------------------------------------------------------------
