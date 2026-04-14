@@ -14,7 +14,7 @@ Při řešení této úlohy jsme využili následující nástroje:
 ## Co AI vygenerovala správně
 * **Správný kod pro bucket**
 * **2 nove endpointy pro vytvoření a vypis filu v bucketu**
-
+* **Filtr pro soft delete v endpointech**
 
 ## Jaké chyby AI udělala a co bylo nutné opravit
 * **Neřekl mi že musíme smazat puvodní db aby alempic fungoval**
