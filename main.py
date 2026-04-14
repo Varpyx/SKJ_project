@@ -200,7 +200,7 @@ def list_files(
     # Dotaz: všechny záznamy daného uživatele, seřazené sestupně podle created_at
     file_records = (
         db.query(models.File)
-        .filter(models.File.user_id == x_user_id)
+        .filter(models.File.user_id == x_user_id, models.File.is_deleted == False)  # Zobrazujeme pouze nesmazané soubory
         .order_by(models.File.created_at.desc())
         .all()
     )
@@ -245,19 +245,23 @@ async def download_file(
     """
     **GET /files/{file_id}**
 
-    Stáhne obsah souboru.
+    Stáhne obsah souboru. 
+    Respektuje Soft Delete – smazané soubory vrátí chybu 404.
 
-    - Ověří, že soubor existuje a patří danému uživateli
+    - Ověří, že soubor existuje a není v koši (is_deleted=False)
     - Vrátí binární obsah souboru s hlavičkou Content-Disposition
-      (prohlížeč ho nabídne ke stažení pod původním názvem)
-
-    Vrátí:
-        Response s binárním obsahem souboru a správnými hlavičkami.
     """
     # 1) Ověř existenci záznamu v DB a přístupová práva
     file_record = get_file_or_404(file_id, x_user_id, db)
 
-    # 2) Načti soubor z disku
+    # 2) FILTR SOFT DELETE: Zabrání stažení smazaného souboru
+    if file_record.is_deleted:
+        raise HTTPException(
+            status_code=404,
+            detail="Soubor nebyl nalezen (byl přesunut do koše)."
+        )
+
+    # 3) Načti soubor z disku
     try:
         file_content = await storage.read_file(file_record.path)
     except FileNotFoundError:
@@ -267,10 +271,7 @@ async def download_file(
             detail="Soubor je evidován v databázi, ale fyzický soubor chybí na disku.",
         )
 
-    # 3) Vrať soubor jako HTTP response
-    # Content-Disposition: attachment → prohlížeč nabídne stažení (ne zobrazení)
-    # filename= → navrhovaný název souboru při stažení
-    #
+    # 4) Aktualizace statistik přenosu v bucketu
     if file_record.bucket_id:
         bucket = db.query(models.Bucket).filter(models.Bucket.id == file_record.bucket_id).first()
         if bucket:
@@ -279,7 +280,8 @@ async def download_file(
             else:
                 bucket.egress_bytes += file_record.size
             db.commit()
-    # 
+            
+    # 5) Vrať soubor jako HTTP response
     return Response(
         content=file_content,
         media_type="application/octet-stream",  # generický binární typ
@@ -290,14 +292,13 @@ async def download_file(
         },
     )
 
-
 # ===========================================================================
 # ENDPOINT 4 – Smazání souboru
 # ===========================================================================
 @app.delete(
     "/files/{file_id}",
     response_model=schemas.DeleteResponse,
-    summary="Smaž soubor",
+    summary="Smaž soubor (Soft Delete)",
     tags=["files"],
 )
 def delete_file(
@@ -308,40 +309,39 @@ def delete_file(
     """
     **DELETE /files/{file_id}**
 
-    Smaže soubor ze storage a odstraní jeho metadata z databáze.
+    Provádí 'Soft Delete' souboru. Soubor zůstává na disku i v DB, 
+    ale je označen jako smazaný a nebude se zobrazovat v běžných výpisech.
 
-    - Nejprve smaže fyzický soubor z disku
-    - Poté smaže záznam z databáze
-    - Obě operace jsou v tomto pořadí záměrné:
-      pokud selže smazání z DB, fyzický soubor je pryč,
-      ale máme o tom záznam (lépe než opak – zombie soubory bez záznamu)
-
-    Vrátí:
-        Potvrzení smazání s ID souboru.
+    - Nastaví příznak is_deleted na True
+    - Sníží zaplněné místo v bucketu (volitelné, záleží na logice aplikace)
+    - Fyzický soubor na disku ZŮSTÁVÁ pro možnost obnovy
     """
     # 1) Ověř existenci záznamu v DB a přístupová práva
     file_record = get_file_or_404(file_id, x_user_id, db)
 
-    # 2) Smaž fyzický soubor z disku
-    deleted_from_disk = storage.delete_file_from_disk(file_record.path)
+    # Kontrola, zda už soubor není smazaný (abychom neodečítali velikost vícekrát)
+    if file_record.is_deleted:
+        return schemas.DeleteResponse(
+            message="Soubor již byl smazán dříve.",
+            id=file_id,
+        )
 
-    if not deleted_from_disk:
-        # Soubor na disku nebyl – logujeme varování, ale pokračujeme
-        # (chceme alespoň vyčistit DB záznam)
-        print(f"VAROVÁNÍ: Soubor {file_record.path} nebyl nalezen na disku.")
+    # 2) SOFT DELETE - Místo mazání z disku a DB jen změníme příznak
+    file_record.is_deleted = True
 
     # 3) Sníž storage_bytes v bucketu
+    # (Soubor sice na disku je, ale pro uživatele je "smazaný", 
+    # takže mu uvolníme kvótu v bucketu)
     if file_record.bucket_id:
         bucket = db.query(models.Bucket).filter(models.Bucket.id == file_record.bucket_id).first()
         if bucket:
             bucket.current_storage_bytes -= file_record.size
 
-    # 4) Odstraň záznam z databáze
-    db.delete(file_record)
+    # 4) Uložíme změny (update místo delete)
     db.commit()
 
     return schemas.DeleteResponse(
-        message="Soubor byl úspěšně smazán.",
+        message="Soubor byl přesunut do koše (soft delete).",
         id=file_id,
     )
 
@@ -408,7 +408,10 @@ def list_bucket_objects(
     # 2. Vytáhneme všechny soubory spojené s tímto bucketem
     file_records = (
         db.query(models.File)
-        .filter(models.File.bucket_id == bucket_id)
+        .filter(
+            models.File.bucket_id == bucket_id,
+            models.File.is_deleted == False  
+        )
         .order_by(models.File.created_at.desc())
         .all()
     )
