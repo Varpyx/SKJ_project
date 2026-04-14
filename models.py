@@ -47,6 +47,7 @@ class File(Base):
     path        – absolutní/relativní cesta k souboru na disku
     size        – velikost souboru v bytech
     created_at  – časová značka nahrání (automaticky nastavená)
+    is_deleted     – boolean flag pro logické mazání (default=False)
     """
 
     __tablename__ = "files"  # název tabulky v SQLite
@@ -82,6 +83,8 @@ class File(Base):
     # Čas nahrání – default=datetime.utcnow se zavolá při každém novém záznamu
     # Mapped[datetime] → SQLAlchemy automaticky použije DateTime
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+
+    is_deleted: Mapped[bool] = mapped_column(default=False)  # pro logické mazání
 
     def __repr__(self) -> str:
         """Textová reprezentace objektu – užitečné při debugování."""
