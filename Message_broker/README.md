@@ -1,33 +1,68 @@
-## 🛠️ Co projekt obsahuje a co se udělalo
+# Message Broker
 
-* **Broker (`main.py`):** Asynchronní server ve FastAPI, který řídí spojení, spravuje témata (Topics) a routuje zprávy od vydavatelů (Publishers) k odběratelům (Subscribers).
-* **Robustnost:** Server je obrněn proti pádům při náhlém odpojení klientů (odchycení `WebSocketDisconnect` a `RuntimeError`) a bezpečně uvolňuje paměť.
-* **Klient (`mb_client.py`):** CLI aplikace, která umí fungovat jako odesílatel i příjemce.
-* **Podpora dvou formátů:** Celý systém podporuje posílání zpráv ve standardním textovém **JSON** formátu i v efektivním binárním **MessagePack** formátu.
+WebSocket-based Pub/Sub broker s perzistentními frontami (Durable Queues).
 
----
+## SUB/PUB komunikace
 
-## ⚙️ Instalace a spuštění
-
-Před spuštěním nainstalujte potřebné závislosti (ujistěte se, že máte aktivní virtuální prostředí):
-
+### Terminal 1 - Server
 ```bash
-pip install -r requirements.txt
+cd Message_broker
+source venv/bin/activate
+uvicorn main:app --port 8000
 ```
 
-## Manuální testování: 
+### Terminal 2 - Subscriber (poslouchá)
+```bash
+cd Message_broker
+source venv/bin/activate
+python mb_client.py --mode sub --topic test
+```
 
-* Server: uvicorn main:app --reload --port 8000
+### Terminal 3 - Publisher (odesílá)
+```bash
+cd Message_broker
+source venv/bin/activate
+python mb_client.py --mode pub --topic test
+```
 
+Příklad zprávy (publisher):
+```json
+{"action": "publish", "topic": "test", "payload": {"data": "hello world"}}
+```
 
-* Sub: 
-  * python mb_client.py --mode sub --format json (json)
-  * python mb_client.py --mode sub --format msgpack (binární)
+## Přepínání formátů
 
+Podpora JSON i MessagePack:
+```bash
+python mb_client.py --mode sub --topic test --format msgpack
+python mb_client.py --mode pub --topic test --format msgpack
+```
 
-* Pub:
-  * python mb_client.py --mode pub --format json (json)
-  * python mb_client.py --mode pub --format msgpack (binarní)
+## Automatizované testy
 
+```bash
+cd Message_broker
+source venv/bin/activate
+pytest tests/ -v
+```
 
-* při vypnutí subu stále posílá pub data, při vypnutí pubu program nespadne
+## Databáze
+
+Zprávy se ukládají do `broker.db` (SQLite).
+
+```bash
+sqlite3 broker.db "SELECT * FROM queued_messages;"
+```
+
+## Alembic migrace
+
+```bash
+# Aplikovat migrace
+alembic upgrade head
+
+# Zobrazit historii
+alembic history
+
+# Vrátit migraci
+alembic downgrade -1
+```
