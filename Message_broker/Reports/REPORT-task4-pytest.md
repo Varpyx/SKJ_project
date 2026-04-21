@@ -67,6 +67,3 @@ tests/test_broker.py::TestCleanup::test_client_removed_after_disconnect PASSED
 ```
 
 ---
-
-**Datum:** 21.04.2026
-**Autor:** Automatizované testy
