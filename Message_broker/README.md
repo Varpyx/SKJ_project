@@ -1,68 +1,33 @@
-# Message Broker
+## 🛠️ Co projekt obsahuje a co se udělalo
 
-WebSocket-based Pub/Sub broker s perzistentními frontami (Durable Queues).
+* **Broker (`main.py`):** Asynchronní server ve FastAPI, který řídí spojení, spravuje témata (Topics) a routuje zprávy od vydavatelů (Publishers) k odběratelům (Subscribers).
+* **Robustnost:** Server je obrněn proti pádům při náhlém odpojení klientů (odchycení `WebSocketDisconnect` a `RuntimeError`) a bezpečně uvolňuje paměť.
+* **Klient (`mb_client.py`):** CLI aplikace, která umí fungovat jako odesílatel i příjemce.
+* **Podpora dvou formátů:** Celý systém podporuje posílání zpráv ve standardním textovém **JSON** formátu i v efektivním binárním **MessagePack** formátu.
 
-## SUB/PUB komunikace
+---
 
-### Terminal 1 - Server
-```bash
-cd Message_broker
-source venv/bin/activate
-uvicorn main:app --port 8000
-```
+## ⚙️ Instalace a spuštění
 
-### Terminal 2 - Subscriber (poslouchá)
-```bash
-cd Message_broker
-source venv/bin/activate
-python mb_client.py --mode sub --topic test
-```
-
-### Terminal 3 - Publisher (odesílá)
-```bash
-cd Message_broker
-source venv/bin/activate
-python mb_client.py --mode pub --topic test
-```
-
-Příklad zprávy (publisher):
-```json
-{"action": "publish", "topic": "test", "payload": {"data": "hello world"}}
-```
-
-## Přepínání formátů
-
-Podpora JSON i MessagePack:
-```bash
-python mb_client.py --mode sub --topic test --format msgpack
-python mb_client.py --mode pub --topic test --format msgpack
-```
-
-## Automatizované testy
+Před spuštěním nainstalujte potřebné závislosti (ujistěte se, že máte aktivní virtuální prostředí):
 
 ```bash
-cd Message_broker
-source venv/bin/activate
-pytest tests/ -v
+pip install -r requirements.txt
 ```
 
-## Databáze
+## Manuální testování: 
 
-Zprávy se ukládají do `broker.db` (SQLite).
+* Server: uvicorn main:app --reload --port 8000
 
-```bash
-sqlite3 broker.db "SELECT * FROM queued_messages;"
-```
 
-## Alembic migrace
+* Sub: 
+  * python mb_client.py --mode sub --format json (json)
+  * python mb_client.py --mode sub --format msgpack (binární)
 
-```bash
-# Aplikovat migrace
-alembic upgrade head
 
-# Zobrazit historii
-alembic history
+* Pub:
+  * python mb_client.py --mode pub --format json (json)
+  * python mb_client.py --mode pub --format msgpack (binarní)
 
-# Vrátit migraci
-alembic downgrade -1
-```
+
+* při vypnutí subu stále posílá pub data, při vypnutí pubu program nespadne

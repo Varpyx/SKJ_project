@@ -45,12 +45,6 @@ class MBClient:
                             data = self.deserialize(response)
                             print(f"[{datetime.now().strftime('%H:%M:%S')}] PŘIJATO: {data}")
 
-                            if data.get("action") == "deliver" and "message_id" in data:
-                                message_id = data["message_id"]
-                                print(f"[*] Odesílám ACK pro zprávu ID={message_id}")
-                                ack_msg = {"action": "ack", "message_id": message_id}
-                                await websocket.send(self.serialize(ack_msg))
-
                     # ---------------------------------------------------------
                     # MÓD PUBLISHER
                     # ---------------------------------------------------------

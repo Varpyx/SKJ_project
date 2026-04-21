@@ -1,21 +1,9 @@
 from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field
 
-
 class BrokerMessage(BaseModel):
     """
-    Jednotný protokol pro všechny zprávy v Pub/Sub systému.
-
-    Příklady zpráv:
-    -------------
-    1. Publisher posílá zprávu:
-       {"action": "publish", "topic": "sensors", "payload": {"temp": 22.5}}
-
-    2. Broker posílá zprávu Subscriberovi (s DB ID):
-       {"action": "deliver", "topic": "sensors", "message_id": 42, "payload": {...}}
-
-    3. Subscriber potvrzuje přijetí:
-       {"action": "ack", "message_id": 42}
+    Jednotný protokol pro všechny zprávy v našem Pub/Sub systému.
     """
     action: str = Field(
         ...,
@@ -23,13 +11,13 @@ class BrokerMessage(BaseModel):
     )
     topic: Optional[str] = Field(
         None,
-        description="Název tématu (např. 'sensors', 'orders')"
+        description="Název tématu (např. 'orders', 'emails')"
     )
     message_id: Optional[int] = Field(
         None,
-        description="ID zprávy z databáze (pro ACK potvrzení)"
+        description="ID zprávy (užitečné pro potvrzování - ack)"
     )
     payload: Optional[Dict[str, Any]] = Field(
         None,
-        description="Samotná data zprávy"
+        description="Samotná data zprávy (JSON objekt)"
     )
