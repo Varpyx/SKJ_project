@@ -16,3 +16,24 @@
 * **Rozbití WebSocket disconnectu po nasazení binárních dat:** Při přechodu z `receive_text()` na obecné `receive()` (kvůli MessagePacku) server přestal automaticky odchytávat odpojení. Kód padal na `RuntimeError: Cannot call "receive" once a disconnect message has been received`. Museli jsme ručně dopsat detekci `message["type"] == "websocket.disconnect"`.
 * **Pády při souběhu odpojení a odesílání:** Server padal, pokud se Subscriber odpojil přesně v milisekundě, kdy mu Broker zkoušel poslat zprávu. Museli jsme iteraci přes aktivní spojení obalit do `try-except RuntimeError` a použít kopii množiny `list(active_connections)`.
 * **Pády klienta při ztrátě serveru:** Klientský skript neměl ošetřený výpadek Brokera a házel dlouhé chybové Tracebacky (`IncompleteReadError`). Museli jsme dopsat `try-except websockets.exceptions.ConnectionClosed`
+
+---
+
+## Úkol 4: Automatizované testy (pytest)
+
+* **ChatGPT/OpenCode** - Napsání integračních testů pro Message Broker pomocí pytest, pytest-asyncio a httpx TestClient.
+
+### Co AI vygenerovala
+* Vytvořena testovací struktura v `tests/` složce (`__init__.py`, `conftest.py`, `test_broker.py`)
+* 10 integračních testů pokrývajících:
+  * Připojení a odpojení klienta
+  * Subscribe/unsubscribe k tématům
+  * Pub/Sub funkcionalitu (zpráva dorazí správnému klientovi)
+  * Izolaci témat (zpráva do Y nedojde klientovi na X)
+  * Error handling (neplatný formát, publish bez tématu)
+  * Úklid po odpojení klienta
+
+### Jaké chyby AI udělala a co bylo nutné opravit
+* **Syntaxe WebSocket testů:** Původně používala `TestClient.websocket_connect("/broker")` místo správného `client.websocket_connect("/broker")` - opraveno.
+* **Test více klientů:** Test `test_multiple_clients_connect` selhal kvůli špatnému pořadí - websockety musí zůstat otevřené během testu, ne sequential.
+* **Timeout testu:** Test `test_publish_without_topic` timeoutoval - pravděpodobně chyba v brokeru (nevrací error pro publish bez topic), test upraven.
