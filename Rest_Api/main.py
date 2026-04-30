@@ -30,6 +30,11 @@ import schemas
 import storage
 from database import Base, engine, get_db
 
+import json
+import websockets
+from fastapi import BackgroundTasks
+from pydantic import BaseModel
+
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB v bytech
 # ---------------------------------------------------------------------------
 # Inicializace databáze
@@ -38,6 +43,25 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB v bytech
 # ---------------------------------------------------------------------------
 # FastAPI aplikace
 # ---------------------------------------------------------------------------
+# Schéma pro požadavek na zpracování
+class ImageProcessRequest(BaseModel):
+    operation: str
+    params: dict = {}
+
+# Pomocná funkce pro komunikaci s Brokerem
+async def send_to_broker(payload: dict):
+    try:
+        async with websockets.connect("ws://localhost:8000/broker") as websocket:
+            message = {
+                "action": "publish",
+                "topic": "image.jobs",
+                "payload": payload
+            }
+            await websocket.send(json.dumps(message))
+    except Exception as e:
+        print(f"Chyba při odesílání do Brokera: {e}")
+
+
 app = FastAPI(
     title="Object Storage Service",
     description=(
@@ -47,6 +71,32 @@ app = FastAPI(
     ),
     version="1.0.0",
 )
+# NOVÝ ENDPOINT: Spuštění zpracování obrázku
+@app.post("/buckets/{bucket_id}/objects/{file_id}/process", tags=["process"])
+async def process_image(
+        bucket_id: int,
+        file_id: str,
+        request: ImageProcessRequest,
+        background_tasks: BackgroundTasks,
+        x_user_id: Optional[str] = Header(default="anonymous"),
+        db: Session = Depends(get_db)
+):
+    # 1. Ověříme, že soubor existuje a patří uživateli
+    get_file_or_404(file_id, x_user_id, db)
+
+    # 2. Příprava dat pro Workera
+    job_payload = {
+        "bucket_id": bucket_id,
+        "file_id": file_id,
+        "user_id": x_user_id,
+        "operation": request.operation,
+        "params": request.params
+    }
+
+    # 3. Odeslání zprávy na pozadí
+    background_tasks.add_task(send_to_broker, job_payload)
+
+    return {"status": "processing_started", "file_id": file_id}
 
 
 # ---------------------------------------------------------------------------
