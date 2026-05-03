@@ -28,10 +28,28 @@
 * **Co AI navrhla správně:**
   * Využití `pytest.mark.asyncio` pro asynchronní testování
   * Použití `asyncio.gather()` pro souběžné odesílání úloh a přijímání potvrzení
-  * Upload testovacích obrázků (`miner.png`, `Skeleton profile picture.jpg`) přes S3 API před odesláním úloh
+  * Upload testovacích obrázků (`miner.png`, `Skeleton.jpg`) přes S3 API před odesláním úloh
   * Odeslání 10 úloh (5 operací × 2 obrázky) na téma `image.jobs`
   * Sběr potvrzení ze tématu `image.done` přes WebSocket
 
 * **Co bylo nutné dodatečně upravit:**
   * *Problém:* Crop operace selhala na malém obrázku (16x21 px) s parametry 10px z každé strany
   * *Oprava:* Změna crop parametrů ze 10px na 2px pro každou stranu, aby se vešly do rozměrů testovacích obrázků
+  * *Problém:* Duplicitní zpracování úloh při restartu Workera (Broker ukládá zprávy do DB, Worker je nepotvrzoval)
+  * *Oprava:* Přidání ACK zpráv v `worker.py` po zpracování každé úlohy (řádky 135-138 a 149-152) - Worker nyní odesílá `{"action": "ack", "message_id": message_id}`
+  * *Problém:* Test se sčítal se starými zprávami v Broker DB při opakovaném spuštění
+  * *Oprava:* Přidání `cleanup_broker_messages()` funkce pro mazání starých zpráv před testem (mazání z `queued_messages` tabulky)
+  * *Problém:* Vytvoření bucketu s již existujícím názvem → HTTP 400
+  * *Oprava:* Generování unikátního názvu bucketu s časovou značkou (`test-integration-{timestamp}`)
+  * *Problém:* Test nepotvrzoval přijaté potvrzovací zprávy (image.done)
+  * *Oprava:* Přidání ACK v `receive_confirmations()` funkci v testu - každá přijatá zpráva je potvrzena
+  * *Problém:* Soubor `Skeleton profile picture.jpg` byl přejmenován na `Skeleton.jpg`
+  * *Oprava:* Aktualizace cesty v testu na `SKELETON_IMAGE = PROJECT_ROOT / "Skeleton.jpg"`
+  * *Problém:* Duplicitní zpracování úloh při restartu Workera (Broker ukládá zprávy do DB, Worker je nepotvrzoval)
+  * *Oprava:* Přidání ACK zpráv v `worker.py` po zpracování každé úlohy (řádky 135-138 a 149-152)
+  * *Problém:* Test se sčítal s starými zprávami v Broker DB při opakovaném spuštění
+  * *Oprava:* Přidání `cleanup_broker_messages()` funkce pro mazání starých zpráv před testem
+  * *Problém:* Vytvoření bucketu s již existujícím názvem → HTTP 400
+  * *Oprava:* Generování unikátního názvu bucketu s časovou značkou (`test-integration-{timestamp}`)
+  * *Problém:* Test nepotvrzoval přijaté potvrzovací zprávy (image.done)
+  * *Oprava:* Přidání ACK v `receive_confirmations()` funkci v testu
