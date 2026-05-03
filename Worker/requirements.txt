@@ -2,3 +2,6 @@ websockets
 httpx
 numpy
 pillow
+pytest
+pytest-asyncio
+uvicorn

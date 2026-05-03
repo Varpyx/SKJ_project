@@ -150,7 +150,6 @@ JSON
 }
 
     Ztmavení (záporné číslo):
-
 JSON
 
 {
@@ -158,5 +157,57 @@ JSON
   "params": {
     "value": -40
   }
+}
+
+# 🧪 Integrační test
+
+Test ověří, že Worker zpracuje 10 úloh (5 operací na 2 obrázky) a odešle 10 potvrzovacích zpráv.
+
+## Požadavky
+- Broker běží na portu 8000
+- S3 Gateway běží na portu 8001
+- Worker je spuštěn a připojen k brokerovi (s ACK mechanismem)
+
+## Spuštění testu
+
+```bash
+# Terminál 1: Broker
+cd Message_broker && uvicorn main:app --port 8000
+
+# Terminál 2: S3 Gateway
+cd Rest_Api && uvicorn main:app --port 8001
+
+# Terminál 3: Worker
+cd Worker && python worker.py
+
+# Terminál 4: Test
+cd Worker && pytest test_worker.py -v
+```
+
+## Co test dělá
+1. Vyčistí staré zprávy z Broker DB (`cleanup_broker_messages()`)
+2. Vytvoří testovací bucket s unikátním názvem přes S3 API
+3. Nahraje `miner.png` a `Skeleton.jpg` do S3
+4. Odešle 10 úloh na téma `image.jobs` (operace: invert, flip, crop, brightness, grayscale)
+5. Souběžně sbírá potvrzení ze tématu `image.done` a odesílá ACK
+6. Ověří, že přišlo přesně 10 potvrzení se statusem "success"
+
+## Testované operace
+- `invert` - negativ
+- `flip` - horizontální překlopení
+- `crop` - ořez (2px z každé strany)
+- `brightness` - úprava jasu (value: 50)
+- `grayscale` - černobílý filtr
+
+## Důležité implementační detaily
+- **ACK mechanismus:** Worker nyní potvrzuje přijetí zpráv z brokera (řádky 135-138, 149-152 v worker.py)
+- **Čištění DB:** Před každým testem se mažou staré zprávy z `queued_messages` tabulky
+- **Unikátní bucket:** Název bucketu obsahuje timestamp pro zamezení kolizí
+- **Worker ukončení:** `KeyboardInterrupt` (Ctrl+C) je normální způsob ukončení Workera
+
+## Známé problémy a řešení
+- **Chyba `AssertionError` na bucket vytvoření:** Příčinou je duplicitní název bucketu → řešení: timestamp v názvu
+- **Worker zpracovává úlohy i bez testu:** Příčinou je chybějící ACK → řešení: Worker nyní odesílá ACK
+- **Test selže s více než 10 potvrzeními:** Příčinou jsou staré zprávy v DB → řešení: `cleanup_broker_messages()`
 }
 

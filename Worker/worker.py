@@ -1,12 +1,13 @@
 import asyncio
 import io
 import json
+import os
 import websockets
 import httpx
 import numpy as np
 from PIL import Image
 
-BROKER_URI = "ws://localhost:8000/broker"
+BROKER_URI = os.getenv("BROKER_URL", "ws://localhost:8000/broker")
 S3_API_URL = "http://localhost:8001"  # Předpokládáme, že tvá S3 běží na portu 8001
 
 
@@ -88,6 +89,7 @@ async def worker_loop():
                     if data.get("action") != "deliver":
                         continue
 
+                    message_id = data.get("message_id")
                     payload = data.get("payload", {})
                     bucket_id = payload.get("bucket_id")
                     file_id = payload.get("file_id")  # ZMĚNA: Hledáme file_id
@@ -130,6 +132,11 @@ async def worker_loop():
                     }
                     await ws.send(json.dumps(done_msg))
 
+                    # 5. Potvrdíme přijetí zprávy z brokera (ACK)
+                    if message_id:
+                        ack_msg = {"action": "ack", "message_id": message_id}
+                        await ws.send(json.dumps(ack_msg))
+
                 except Exception as e:
                     print(f"❌ Chyba při zpracování: {str(e)}")
                     # Odešleme chybovou zprávu
@@ -139,6 +146,11 @@ async def worker_loop():
                         "payload": {"status": "error", "message": str(e)}
                     }
                     await ws.send(json.dumps(error_msg))
+
+                    # Potvrdíme přijetí zprávy z brokera i při chybě (ACK)
+                    if message_id:
+                        ack_msg = {"action": "ack", "message_id": message_id}
+                        await ws.send(json.dumps(ack_msg))
 
 
 if __name__ == "__main__":
