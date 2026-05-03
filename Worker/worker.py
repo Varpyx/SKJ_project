@@ -1,12 +1,13 @@
 import asyncio
 import io
 import json
+import os
 import websockets
 import httpx
 import numpy as np
 from PIL import Image
 
-BROKER_URI = "ws://localhost:8000/broker"
+BROKER_URI = os.getenv("BROKER_URL", "ws://localhost:8000/broker")
 S3_API_URL = "http://localhost:8001"  # Předpokládáme, že tvá S3 běží na portu 8001
 
 
