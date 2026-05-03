@@ -150,7 +150,6 @@ JSON
 }
 
     Ztmavení (záporné číslo):
-
 JSON
 
 {
@@ -158,5 +157,36 @@ JSON
   "params": {
     "value": -40
   }
+}
+
+# 🧪 Integrační test
+
+Test ověří, že Worker zpracuje 10 úloh (5 operací na 2 obrázky) a odešle 10 potvrzovacích zpráv.
+
+## Požadavky
+- Broker běží na portu 8000
+- S3 Gateway běží na portu 8001
+- Worker je spuštěn a připojen k brokerovi
+
+## Spuštění testu
+
+```bash
+cd Worker
+pytest test_worker.py -v
+```
+
+## Co test dělá
+1. Vytvoří testovací bucket přes S3 API
+2. Nahraje `miner.png` a `Skeleton profile picture.jpg` do S3
+3. Odešle 10 úloh na téma `image.jobs` (operace: invert, flip, crop, brightness, grayscale)
+4. Souběžně sbírá potvrzení ze tématu `image.done`
+5. Ověří, že přišlo přesně 10 potvrzení se statusem "success"
+
+## Testované operace
+- `invert` - negativ
+- `flip` - horizontální překlopení
+- `crop` - ořez (2px z každé strany)
+- `brightness` - úprava jasu (value: 50)
+- `grayscale` - černobílý filtr
 }
 
