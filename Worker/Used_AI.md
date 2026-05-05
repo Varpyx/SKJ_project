@@ -6,12 +6,17 @@
 
 1. *"okey bro, ted ty 2 věci mjsíme spojit. zde je nove zadání: Úkol: Image Processing Worker (Event-Driven)..."*
 2. *"jo akorat nemame to naopka? dokumentace API (automaticky generovaná FastAPI): http://localhost:8000/docs ← Swagger UI [...] S3 je na 8000"*
+3. *"Mám toto zadání, vše ostatní je hotové, jen potřebuji bod testování 3. - udělat webovku, která tyto obrázky které mám v bucketu zobrazí"*
 
 ## 2. Co AI navrhla správně na první dobrou
 
 * **Kostra mikroslužeb:** Okamžité sestavení funkční asynchronní kostry v `worker.py` využívající `websockets` pro Broker a `httpx` pro neblokující komunikaci s REST API.
 * **NumPy transformace:** Všech 5 matematických operací nad maticemi bylo implementováno přesně podle zadání hned v prvním návrhu (včetně řešení ořezu a prevence přetečení barev z `uint8`).
 * **Integrace do S3:** Správné použití `BackgroundTasks` ve FastAPI pro okamžité odeslání HTTP odpovědi a asynchronní delegování zprávy do Brokera.
+* **Struktura a UI React frontendu:**  Návrh jednostránkové klientské aplikace (SPA) přímo v jednom HTML souboru přes CDN (React + Babel) byl výborně strukturovaný. Od začátku obsahoval funkční správu stavů (useState), oddělení komponent (notifikace, historie jobů) a responzivní design, což umožnilo bleskové testování S3 API bez nutnosti složitě nastavovat Node.js/Webpack prostředí.
+
+
+
 
 ## 3. Co bylo nutné dodatečně upravit a ladit
 
@@ -20,6 +25,9 @@
 * **Chybějící bezpečnostní hlavičky (Auth Headers):**
   * *Problém:* První návrh Workera se snažil soubory z S3 stáhnout "naslepo". Tvůj backend ale striktně (a správně) vyžaduje hlavičku `X-User-Id`.
   * *Oprava:* Propašování uživatelského ID z API requestu přes Brokera až do Workera a následné přidání hlavičky `{"X-User-Id": user_id}`.
+* **CORS preflight a přesměrování u koncových lomítek (Trailing Slash):**
+  * *Problém:* Prohlížeč blokoval požadavky na S3 Gateway (chyby 307 Temporary Redirect a 405 Method Not Allowed). Důvodem byla snaha FastAPI přesměrovat frontendový dotaz bez lomítka na endpoint s lomítkem (např. /objects/), což u OPTIONS dotazů prohlížeč z bezpečnostních důvodů striktně zakazuje. K tomu byl navíc CORS middleware v kódu přidán chybně ještě před samotným vytvořením app = FastAPI().
+  * *Oprava:* Sjednocení koncových lomítek mezi React fetch voláním a FastAPI routery a přesunutí bloku app.add_middleware až za inicializaci aplikace, aby mohl server správně odpovídat na ověřovací OPTIONS požadavky. Další úpravou bylo sjednocení klíčů v JSON odpovědích (frontend očekával objects, ale API vracelo files) a oprava URL pro stahování obrázků na funkční endpoint /files/{file_id}.
 
 ## 4. Integrační test (test_worker.py)
 

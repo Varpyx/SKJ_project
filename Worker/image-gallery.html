@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>S3 Image Viewer</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f0f11;
+      --surface: #181820;
+      --surface2: #1f1f2a;
+      --border: rgba(255,255,255,0.08);
+      --border2: rgba(255,255,255,0.14);
+      --text: #e8e8f0;
+      --text2: #888899;
+      --text3: #555566;
+      --accent: #6c63ff;
+      --accent2: #4e46e0;
+      --green: #22c55e;
+      --red: #ef4444;
+      --yellow: #f59e0b;
+      --font: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 13px;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* --- Layout --- */
+    .app { display: flex; flex-direction: column; min-height: 100vh; }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--text);
+    }
+    .logo span { color: var(--accent); }
+
+    .main { display: flex; flex: 1; }
+
+    /* --- Sidebar --- */
+    .sidebar {
+      width: 260px;
+      min-width: 260px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+      gap: 16px;
+      overflow-y: auto;
+    }
+
+    .sidebar-section { display: flex; flex-direction: column; gap: 6px; }
+    .sidebar-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text3);
+    }
+
+    input, select {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 12px;
+      padding: 7px 10px;
+      border-radius: 6px;
+      outline: none;
+      width: 100%;
+      transition: border-color 0.15s;
+    }
+    input:focus, select:focus { border-color: var(--accent); }
+    input::placeholder { color: var(--text3); }
+
+    button {
+      font-family: var(--font);
+      font-size: 12px;
+      cursor: pointer;
+      border: none;
+      border-radius: 6px;
+      padding: 7px 12px;
+      transition: all 0.15s;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+    }
+    .btn-primary:hover { background: var(--accent2); }
+    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text2);
+      border: 1px solid var(--border2);
+    }
+    .btn-ghost:hover { background: var(--surface2); color: var(--text); }
+
+    .btn-danger {
+      background: transparent;
+      color: var(--red);
+      border: 1px solid rgba(239,68,68,0.3);
+    }
+    .btn-danger:hover { background: rgba(239,68,68,0.1); }
+
+    /* --- Object list in sidebar --- */
+    .object-list { display: flex; flex-direction: column; gap: 2px; }
+
+    .object-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.1s;
+      border: 1px solid transparent;
+    }
+    .object-item:hover { background: var(--surface2); }
+    .object-item.selected {
+      background: rgba(108,99,255,0.12);
+      border-color: rgba(108,99,255,0.3);
+    }
+
+    .object-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 4px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .object-icon img { width: 100%; height: 100%; object-fit: cover; }
+
+    .object-name {
+      font-size: 11px;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+    }
+
+    /* --- Content area --- */
+    .content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .content-inner {
+      flex: 1;
+      padding: 24px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* --- Image viewer --- */
+    .image-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .panel-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text2);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .image-display {
+      background: repeating-conic-gradient(var(--surface2) 0% 25%, transparent 0% 50%) 0 0 / 20px 20px;
+      min-height: 300px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .image-display img {
+      max-width: 100%;
+      max-height: 480px;
+      border-radius: 4px;
+      object-fit: contain;
+    }
+
+    .image-placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      color: var(--text3);
+    }
+
+    .image-placeholder-icon {
+      width: 56px;
+      height: 56px;
+      border: 2px dashed var(--border2);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+    }
+
+    /* --- Ops panel --- */
+    .ops-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .ops-grid {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .op-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+
+    .op-field { display: flex; flex-direction: column; gap: 4px; }
+    .op-field label { font-size: 10px; color: var(--text3); letter-spacing: 0.06em; text-transform: uppercase; }
+
+    .op-select { width: 180px; }
+    .op-num { width: 80px; }
+
+    /* --- Crop params --- */
+    .crop-params {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    /* --- Notifications --- */
+    .notifications {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 999;
+    }
+
+    .notif {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border2);
+      background: var(--surface);
+      min-width: 240px;
+      max-width: 340px;
+      animation: slideIn 0.2s ease;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+
+    @keyframes slideIn {
+      from { transform: translateX(20px); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    .notif-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .notif.success .notif-dot { background: var(--green); }
+    .notif.error .notif-dot { background: var(--red); }
+    .notif.info .notif-dot { background: var(--accent); }
+    .notif.warning .notif-dot { background: var(--yellow); }
+
+    .notif-text { font-size: 12px; color: var(--text); flex: 1; }
+
+    .notif-close {
+      cursor: pointer;
+      color: var(--text3);
+      font-size: 14px;
+      line-height: 1;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    /* --- Status badge --- */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 100px;
+    }
+    .badge.processing { background: rgba(245,158,11,0.15); color: var(--yellow); }
+    .badge.done { background: rgba(34,197,94,0.15); color: var(--green); }
+    .badge.error { background: rgba(239,68,68,0.15); color: var(--red); }
+
+    /* --- Job log --- */
+    .job-log {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .job-entry {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      background: var(--surface2);
+      border-radius: 6px;
+      font-size: 11px;
+    }
+
+    .job-time { color: var(--text3); font-size: 10px; min-width: 60px; }
+    .job-name { color: var(--text2); flex: 1; }
+    .job-op { color: var(--accent); font-weight: 700; }
+
+    /* --- Empty state --- */
+    .empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 48px 24px;
+      color: var(--text3);
+      text-align: center;
+    }
+    .empty-icon { font-size: 32px; }
+
+    /* Spinner */
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid var(--border2);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+    .text-muted { color: var(--text2); }
+    .text-small { font-size: 11px; }
+    .flex { display: flex; }
+    .gap-8 { gap: 8px; }
+    .items-center { align-items: center; }
+    .w-full { width: 100%; }
+    .mt-8 { margin-top: 8px; }
+
+    /* Mobile hint */
+    @media (max-width: 700px) {
+      .sidebar { width: 200px; min-width: 200px; }
+    }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef } = React;
+
+// ─── Config defaults ───────────────────────────────────────────────
+const DEFAULT_BASE = "http://127.0.0.1:8001";
+
+// ─── Operations ────────────────────────────────────────────────────
+const OPERATIONS = [
+  { value: "grayscale",   label: "Grayscale",          params: [] },
+  { value: "invert",      label: "Inverze barev",       params: [] },
+  { value: "flip",        label: "Horizontální překlopení", params: [] },
+  { value: "brightness",  label: "Úprava jasu",         params: [{ name: "value", label: "Hodnota (+/-)", default: 50, min: -255, max: 255 }] },
+  { value: "crop",        label: "Ořez",                params: [
+    { name: "top",    label: "Shora (px)", default: 100, min: 0 },
+    { name: "bottom", label: "Zdola (px)", default: 100, min: 0 },
+    { name: "left",   label: "Zleva (px)", default: 100, min: 0 },
+    { name: "right",  label: "Zprava (px)", default: 100, min: 0 },
+  ]},
+];
+
+// ─── Tiny notification system ───────────────────────────────────────
+let _notifId = 0;
+function Notifications({ notifs, remove }) {
+  return (
+    <div className="notifications">
+      {notifs.map(n => (
+        <div key={n.id} className={`notif ${n.type}`}>
+          <div className="notif-dot" />
+          <div className="notif-text">{n.msg}</div>
+          <button className="notif-close" onClick={() => remove(n.id)}>✕</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Main App ───────────────────────────────────────────────────────
+function App() {
+  const [baseUrl, setBaseUrl]     = useState(DEFAULT_BASE);
+  const [userId, setUserId]       = useState("anonymous");
+  const [bucketId, setBucketId]   = useState("");
+  const [objects, setObjects]     = useState([]);
+  const [loading, setLoading]     = useState(false);
+  const [selectedObj, setSelectedObj] = useState(null);
+  const [imageUrl, setImageUrl]   = useState(null);
+  const [operation, setOperation] = useState("grayscale");
+  const [opParams, setOpParams]   = useState({});
+  const [submitting, setSubmitting] = useState(false);
+  const [jobs, setJobs]           = useState([]);
+  const [notifs, setNotifs]       = useState([]);
+
+  const notify = useCallback((msg, type = "info") => {
+    const id = ++_notifId;
+    setNotifs(n => [...n, { id, msg, type }]);
+    setTimeout(() => setNotifs(n => n.filter(x => x.id !== id)), 4500);
+  }, []);
+
+  const removeNotif = useCallback((id) => setNotifs(n => n.filter(x => x.id !== id)), []);
+
+  // Reset params when operation changes
+  useEffect(() => {
+    const op = OPERATIONS.find(o => o.value === operation);
+    if (op) {
+      const defaults = {};
+      op.params.forEach(p => defaults[p.name] = p.default);
+      setOpParams(defaults);
+    }
+  }, [operation]);
+
+  // Load image URL when object selected
+  useEffect(() => {
+    if (!selectedObj || !bucketId) { setImageUrl(null); return; }
+    setImageUrl(`${baseUrl}/files/${selectedObj.id || selectedObj.name}`);
+  }, [selectedObj, bucketId, baseUrl]);
+
+  // ── Fetch objects ──
+  const fetchObjects = async () => {
+    if (!bucketId.trim()) { notify("Zadej ID bucketu", "warning"); return; }
+    setLoading(true);
+    setObjects([]);
+    setSelectedObj(null);
+    try {
+      const res = await fetch(`${baseUrl}/buckets/${bucketId}/objects/`, {
+        headers: { "x-user-id": userId }
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      // Support both array and {objects:[...]} response shapes
+      const list = Array.isArray(data) ? data : (data.files || data.objects || data.items || []);
+      setObjects(list);
+      notify(`Načteno ${list.length} objektů`, "success");
+    } catch (e) {
+      notify(`Chyba při načítání: ${e.message}`, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── Submit job ──
+  const submitJob = async () => {
+    if (!selectedObj) { notify("Vyber objekt", "warning"); return; }
+    setSubmitting(true);
+    const objId = selectedObj.id || selectedObj.name;
+    const body = { operation, params: opParams };
+    try {
+      const res = await fetch(`${baseUrl}/buckets/${bucketId}/objects/${objId}/process`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-user-id": userId },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
+      const time = new Date().toLocaleTimeString("cs");
+      setJobs(j => [{ id: Date.now(), time, objId, op: operation, status: "processing", data }, ...j.slice(0,19)]);
+      notify(`Job odeslán: ${operation} → ${objId}`, "success");
+    } catch (e) {
+      notify(`Chyba: ${e.message}`, "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const currentOp = OPERATIONS.find(o => o.value === operation);
+
+  return (
+    <div className="app">
+      <header>
+        <div className="logo">S3<span>_</span>viewer</div>
+        <div className="flex gap-8 items-center">
+          <span className="text-muted text-small">gateway:</span>
+          <input
+            value={baseUrl}
+            onChange={e => setBaseUrl(e.target.value.replace(/\/$/, ""))}
+            style={{ width: 200 }}
+            placeholder="http://127.0.0.1:8001"
+          />
+          <span className="text-muted text-small">x-user-id:</span>
+          <input
+            value={userId}
+            onChange={e => setUserId(e.target.value)}
+            style={{ width: 120 }}
+            placeholder="anonymous"
+          />
+        </div>
+      </header>
+
+      <div className="main">
+        {/* Sidebar */}
+        <aside className="sidebar">
+          <div className="sidebar-section">
+            <div className="sidebar-label">Bucket</div>
+            <input
+              value={bucketId}
+              onChange={e => setBucketId(e.target.value)}
+              placeholder="bucket-id"
+              onKeyDown={e => e.key === "Enter" && fetchObjects()}
+            />
+            <button className="btn-primary" onClick={fetchObjects} disabled={loading}>
+              {loading ? <span className="spinner" /> : "Načíst objekty"}
+            </button>
+          </div>
+
+          <div className="sidebar-section" style={{ flex: 1 }}>
+            <div className="sidebar-label">
+              Objekty {objects.length > 0 && `(${objects.length})`}
+            </div>
+            <div className="object-list">
+              {objects.length === 0 && !loading && (
+                <div style={{ color: "var(--text3)", fontSize: 11, padding: "8px 0" }}>
+                  Žádné objekty
+                </div>
+              )}
+              {objects.map((obj, i) => {
+                const name = obj.name || obj.key || obj.id || `object-${i}`;
+                const id   = obj.id || obj.key || obj.name;
+                const isImg = /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(name);
+                return (
+                  <div
+                    key={id || i}
+                    className={`object-item${selectedObj === obj ? " selected" : ""}`}
+                    onClick={() => setSelectedObj(obj)}
+                  >
+                    <div className="object-icon">
+                      {isImg ? (
+                        <img
+                          src={`${baseUrl}/files/${id}`}
+                          alt=""
+                          onError={e => { e.target.style.display = "none"; }}
+                        />
+                      ) : (
+                        <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100%", fontSize:11, color:"var(--text3)" }}>
+                          📄
+                        </div>
+                      )}
+                    </div>
+                    <span className="object-name" title={name}>{name}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </aside>
+
+        {/* Main content */}
+        <div className="content">
+          <div className="content-inner">
+
+            {/* Image viewer */}
+            <div className="image-panel">
+              <div className="panel-header">
+                <span className="panel-title">
+                  {selectedObj
+                    ? (selectedObj.name || selectedObj.key || selectedObj.id)
+                    : "Náhled"}
+                </span>
+                {selectedObj && (
+                  <div className="flex gap-8 items-center">
+                    <span className="text-small text-muted">
+                      {selectedObj.size ? `${(selectedObj.size/1024).toFixed(1)} KB` : ""}
+                    </span>
+                    <a
+                      href={imageUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: "var(--accent)", fontSize: 11, textDecoration: "none" }}
+                    >
+                      ↗ otevřít
+                    </a>
+                  </div>
+                )}
+              </div>
+
+              <div className="image-display">
+                {imageUrl ? (
+                  <img
+                    src={imageUrl}
+                    alt={selectedObj?.name}
+                    key={imageUrl}
+                    onError={e => {
+                      e.target.style.display = "none";
+                      e.target.nextSibling.style.display = "flex";
+                    }}
+                  />
+                ) : null}
+                <div className="image-placeholder" style={{ display: imageUrl ? "none" : "flex" }}>
+                  <div className="image-placeholder-icon">🖼</div>
+                  <span>Vyber objekt ze seznamu vlevo</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Processing panel */}
+            <div className="ops-panel">
+              <div className="panel-header">
+                <span className="panel-title">Zpracování obrázku</span>
+                {selectedObj && (
+                  <span className="text-muted text-small">
+                    → {selectedObj.name || selectedObj.key || selectedObj.id}
+                  </span>
+                )}
+              </div>
+              <div className="ops-grid">
+                <div className="op-row">
+                  <div className="op-field">
+                    <label>Operace</label>
+                    <select
+                      className="op-select"
+                      value={operation}
+                      onChange={e => setOperation(e.target.value)}
+                    >
+                      {OPERATIONS.map(op => (
+                        <option key={op.value} value={op.value}>{op.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Dynamic params */}
+                  {currentOp?.params.length === 1 && (
+                    <div className="op-field">
+                      <label>{currentOp.params[0].label}</label>
+                      <input
+                        type="number"
+                        className="op-num"
+                        value={opParams[currentOp.params[0].name] ?? currentOp.params[0].default}
+                        min={currentOp.params[0].min}
+                        max={currentOp.params[0].max}
+                        onChange={e => setOpParams(p => ({ ...p, [currentOp.params[0].name]: Number(e.target.value) }))}
+                      />
+                    </div>
+                  )}
+
+                  <div className="op-field" style={{ marginLeft: "auto" }}>
+                    <label>&nbsp;</label>
+                    <button
+                      className="btn-primary"
+                      onClick={submitJob}
+                      disabled={submitting || !selectedObj}
+                      style={{ minWidth: 120 }}
+                    >
+                      {submitting ? <><span className="spinner" /> Odesílám…</> : "▶ Zpracovat"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Crop params */}
+                {operation === "crop" && (
+                  <div>
+                    <label style={{ fontSize:10, color:"var(--text3)", letterSpacing:"0.06em", textTransform:"uppercase" }}>
+                      Parametry ořezu (px)
+                    </label>
+                    <div className="crop-params mt-8">
+                      {currentOp.params.map(p => (
+                        <div className="op-field" key={p.name}>
+                          <label>{p.label}</label>
+                          <input
+                            type="number"
+                            value={opParams[p.name] ?? p.default}
+                            min={p.min}
+                            onChange={e => setOpParams(prev => ({ ...prev, [p.name]: Number(e.target.value) }))}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Request preview */}
+                <div style={{
+                  background: "var(--surface2)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 6,
+                  padding: "8px 12px",
+                  fontSize: 11,
+                  color: "var(--text3)",
+                  fontFamily: "inherit",
+                }}>
+                  <span style={{ color: "var(--yellow)" }}>POST</span>
+                  <span style={{ color: "var(--text2)", marginLeft: 8 }}>
+                    /buckets/<span style={{ color: "var(--accent)" }}>{bucketId || "…"}</span>
+                    /objects/<span style={{ color: "var(--accent)" }}>
+                      {selectedObj ? (selectedObj.id || selectedObj.name) : "…"}
+                    </span>/process
+                  </span>
+                  <span style={{ color: "var(--text3)", marginLeft: 12 }}>
+                    {JSON.stringify({ operation, params: opParams })}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Job log */}
+            {jobs.length > 0 && (
+              <div className="ops-panel">
+                <div className="panel-header">
+                  <span className="panel-title">Historie jobů</span>
+                  <button className="btn-ghost" style={{ fontSize: 10, padding: "4px 8px" }} onClick={() => setJobs([])}>
+                    Vymazat
+                  </button>
+                </div>
+                <div style={{ padding: 12 }}>
+                  <div className="job-log">
+                    {jobs.map(j => (
+                      <div className="job-entry" key={j.id}>
+                        <span className="job-time">{j.time}</span>
+                        <span className="job-op">{j.op}</span>
+                        <span className="job-name">{j.objId}</span>
+                        <span className="badge processing">processing_started</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+          </div>
+        </div>
+      </div>
+
+      <Notifications notifs={notifs} remove={removeNotif} />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
