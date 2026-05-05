@@ -184,6 +184,11 @@ cd Worker && python worker.py
 cd Worker && pytest test_worker.py -v
 ```
 
+## Testování v webu
+Lze testovat v jednoduchém souboru image-gallery.html
+Stačí otevřít v prohlížeči, zadat gateway http://127.0.0.1:8001 a správné user id a id bucketu
+Lze z ní přímo spouštět dané operace s obrázkem
+
 ## Co test dělá
 1. Vyčistí staré zprávy z Broker DB (`cleanup_broker_messages()`)
 2. Vytvoří testovací bucket s unikátním názvem přes S3 API
