@@ -19,7 +19,7 @@ Architektura:
 """
 
 from typing import Optional
-
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Depends, FastAPI, Header, HTTPException, UploadFile, File as FastAPIFile, Form
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
@@ -62,6 +62,7 @@ async def send_to_broker(payload: dict):
         print(f"Chyba při odesílání do Brokera: {e}")
 
 
+# 1. NEJPRVE vytvoř aplikaci
 app = FastAPI(
     title="Object Storage Service",
     description=(
@@ -70,6 +71,14 @@ app = FastAPI(
         "Každý uživatel má vlastní izolovaný prostor v úložišti."
     ),
     version="1.0.0",
+)
+
+# 2. AŽ POTOM přidej CORS middleware
+app.add_middleware(
+    CORSMiddleware, 
+    allow_origins=["*"], 
+    allow_methods=["*"], 
+    allow_headers=["*"]
 )
 # NOVÝ ENDPOINT: Spuštění zpracování obrázku
 @app.post("/buckets/{bucket_id}/objects/{file_id}/process", tags=["process"])
