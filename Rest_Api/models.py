@@ -73,8 +73,8 @@ class File(Base):
     # Původní název souboru (např. "report.pdf")
     filename: Mapped[str] = mapped_column(String)
 
-    # Cesta k souboru na disku (např. "storage/user123/abc-uuid")
-    path: Mapped[str] = mapped_column(String)
+    #SMAZANO Cesta k souboru na disku (např. "storage/user123/abc-uuid")
+    # path: Mapped[str] = mapped_column(String)
 
     # Velikost souboru v bytech
     # int → SQLAlchemy automaticky použije Integer
@@ -85,6 +85,10 @@ class File(Base):
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
 
     is_deleted: Mapped[bool] = mapped_column(default=False)  # pro logické mazání
+
+    # PŘIDÁNO: Haystack metadata (mohou být None, dokud nepřijde ACK od Brokera)
+    volume_id: Mapped[int | None] = mapped_column()
+    offset: Mapped[int | None] = mapped_column()
 
     def __repr__(self) -> str:
         """Textová reprezentace objektu – užitečné při debugování."""

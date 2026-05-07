@@ -28,12 +28,20 @@ from sqlalchemy.exc import IntegrityError
 import models
 import schemas
 import storage
-from database import Base, engine, get_db
+from database import Base, engine, get_db, SessionLocal
 
 import json
 import websockets
 from fastapi import BackgroundTasks
 from pydantic import BaseModel
+
+import httpx
+import msgpack
+import uuid
+import asyncio
+from contextlib import asynccontextmanager
+
+models.Base.metadata.create_all(bind=engine)
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB v bytech
 # ---------------------------------------------------------------------------
@@ -62,9 +70,53 @@ async def send_to_broker(payload: dict):
         print(f"Chyba při odesílání do Brokera: {e}")
 
 
+async def haystack_ack_listener():
+    """Naslouchá potvrzením z Haystacku a ukládá volume_id a offset do databáze."""
+    while True:
+        try:
+            async with websockets.connect("ws://127.0.0.1:8000/broker") as ws:
+                # Přihlášení k tématu storage.ack
+                await ws.send(msgpack.packb({"action": "subscribe", "topic": "storage.ack"}))
+                print("✅ S3 Gateway naslouchá na 'storage.ack'")
+
+                while True:
+                    msg = await ws.recv()
+                    data = msgpack.unpackb(msg)
+
+                    if data.get("action") == "deliver":
+                        payload = data.get("payload", {})
+                        file_id = payload.get("object_id")
+                        message_id = data.get("message_id")
+
+                        # Aktualizace databáze
+                        db = SessionLocal()
+                        try:
+                            db_file = db.query(models.File).filter(models.File.file_id == file_id).first()
+                            if db_file:
+                                db_file.volume_id = payload.get("volume_id")
+                                db_file.offset = payload.get("offset")
+                                db.commit()
+                                print(f"✅ Metadata uložena pro soubor {file_id}")
+                        finally:
+                            db.close()
+
+                        # Odeslání ACK Brokeru
+                        if message_id:
+                            await ws.send(msgpack.packb({"action": "ack", "message_id": message_id}))
+        except Exception as e:
+            await asyncio.sleep(3)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = asyncio.create_task(haystack_ack_listener())
+    yield
+    task.cancel()
+
 # 1. NEJPRVE vytvoř aplikaci
 app = FastAPI(
     title="Object Storage Service",
+    lifespan=lifespan,
     description=(
         "Jednoduchá object storage služba inspirovaná Amazon S3.\n\n"
         "Umožňuje nahrávání, stahování, výpis a mazání souborů.\n"
@@ -191,8 +243,6 @@ async def upload_file(
     if len(file_content) == 0:
         raise HTTPException(status_code=400, detail="Nahraný soubor je prázdný.")
 
-    # 2) Vygeneruj unikátní ID pro tento soubor
-    file_id = storage.generate_file_id()
 
     # 2. KONTROLA: Není soubor příliš velký?
     if len(file_content) > MAX_FILE_SIZE:
@@ -201,12 +251,22 @@ async def upload_file(
             detail=f"Soubor je příliš velký. Maximální povolená velikost je {MAX_FILE_SIZE / 1024 / 1024} MB."
         )
 
-    # 3) Ulož soubor fyzicky na disk (asynchronně)
-    file_path, file_size = await storage.save_file(
-        user_id=x_user_id,
-        file_id=file_id,
-        file_content=file_content,
-    )
+    file_id = str(uuid.uuid4())
+
+    # Odeslání fotky přes Broker do Haystacku v MessagePacku
+    try:
+        async with websockets.connect("ws://localhost:8000/broker") as ws:
+            pub_msg = {
+                "action": "publish",
+                "topic": "storage.write",
+                "payload": {
+                    "object_id": file_id,
+                    "image_bytes": file_content
+                }
+            }
+            await ws.send(msgpack.packb(pub_msg))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Nelze odeslat data do Haystack node.")
 
     # 4) Vytvoř záznam metadat v databázi
     db_file = models.File(
@@ -214,15 +274,16 @@ async def upload_file(
         user_id=x_user_id,
         bucket_id=bucket_id,  # <-- Propojení souboru s bucketem!
         filename=file.filename or "unnamed",
-        path=file_path,
-        size=file_size,
+        size=len(file_content),
+        volume_id=None,
+        offset=None
     )
     db.add(db_file)      # přidej objekt do session (zatím jen v paměti)
-    bucket.current_storage_bytes += file_size
+    bucket.current_storage_bytes += len(file_content)
     if x_internal_source == "true":
-        bucket.internal_transfer_bytes += file_size
+        bucket.internal_transfer_bytes += len(file_content)
     else:
-        bucket.ingress_bytes += file_size
+        bucket.ingress_bytes += len(file_content)
     db.commit()          # zapiš do databáze (trvalé uložení)
     db.refresh(db_file)  # načti zpět aktualizovaná data (např. created_at)
 
@@ -230,10 +291,8 @@ async def upload_file(
     return schemas.FileUploadResponse(
         id=db_file.file_id,
         filename=db_file.filename,
-        size=db_file.size,
-        path = db_file.path
+        size=db_file.size
     )
-
 
 # ===========================================================================
 # ENDPOINT 2 – Výpis souborů uživatele
@@ -271,8 +330,10 @@ def list_files(
             user_id=f.user_id,
             filename=f.filename,
             size=f.size,
-            path = f.path,
+            #path = f.path,
             created_at=f.created_at,
+            volume_id=f.volume_id,  # <--- PŘIDEJ TOTO
+            offset=f.offset
         )
         for f in file_records
     ]
@@ -320,15 +381,31 @@ async def download_file(
             detail="Soubor nebyl nalezen (byl přesunut do koše)."
         )
 
-    # 3) Načti soubor z disku
-    try:
-        file_content = await storage.read_file(file_record.path)
-    except FileNotFoundError:
-        # Soubor je v DB, ale chybí na disku – nekonzistentní stav
-        raise HTTPException(
-            status_code=500,
-            detail="Soubor je evidován v databázi, ale fyzický soubor chybí na disku.",
-        )
+    # --- CHYTRÉ ČEKÁNÍ (Eventual Consistency) ---
+    # Pokud se soubor ještě zapisuje do Haystacku, Gateway chvilku počká (max 2 sekundy).
+    if file_record.volume_id is None:
+        for _ in range(10):
+            await asyncio.sleep(0.2)  # Počkáme 200 ms
+            db.refresh(file_record)  # Znovu načteme stav z DB
+            if file_record.volume_id is not None:
+                break  # Haystack potvrdil zápis, můžeme pokračovat!
+
+        # Pokud ani po 2 sekundách Haystack neodpověděl, teprve pak vyhodíme chybu
+        if file_record.volume_id is None:
+            raise HTTPException(
+                status_code=425,
+                detail="Soubor se ještě zapisuje na disk. Zkuste to za chvíli."
+            )
+    # --------------------------------------------
+    # 3) Stažení z Haystack Nodu (přes HTTP)
+    async with httpx.AsyncClient() as client:
+        haystack_url = f"http://127.0.0.1:8002/volume/{file_record.volume_id}/{file_record.offset}/{file_record.size}"
+        resp = await client.get(haystack_url)
+
+        if resp.status_code != 200:
+            raise HTTPException(status_code=500, detail="Chyba při čtení ze svazku v Haystacku.")
+
+        file_content = resp.content
 
     # 4) Aktualizace statistik přenosu v bucketu
     if file_record.bucket_id:
@@ -482,8 +559,10 @@ def list_bucket_objects(
             user_id=f.user_id,
             filename=f.filename,
             size=f.size,
-            path=f.path,
+            #path=f.path,
             created_at=f.created_at,
+            volume_id=f.volume_id,  # <--- PŘIDEJ TOTO
+            offset=f.offset
         )
         for f in file_records
     ]

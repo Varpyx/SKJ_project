@@ -65,9 +65,10 @@ class FileUploadResponse(BaseModel):
     # gt=0 (greater than) – velikost musí být kladné číslo, prázdný soubor nedává smysl
     size: int = Field(..., description="Velikost souboru v bytech", gt=0, le=10_485_760)
 
-    # ... znamená povinné pole – cesta musí být vždy uložena pro pozdější přístup
-    path: str = Field(..., description="Cesta k souboru na disku")
-
+    # SMAZANO... znamená povinné pole – cesta musí být vždy uložena pro pozdější přístup
+    #path: str = Field(..., description="Cesta k souboru na disku")
+    volume_id: int | None = Field(default=None, description="ID svazku v Haystacku")
+    offset: int | None = Field(default=None, description="Začátek souboru v bajtech")
     # from_attributes=True umožňuje vytvořit schéma přímo z SQLAlchemy objektu:
     # FileUploadResponse.model_validate(db_file_object)
     model_config = {"from_attributes": True}
@@ -104,8 +105,8 @@ class FileMetadata(BaseModel):
         pattern=r"^[\w\-. ]+$"
     )
 
-    # ... znamená povinné pole – cesta nutná pro stažení souboru
-    path: str = Field(..., description="Cesta k souboru na disku")
+    #SMAZANO ... znamená povinné pole – cesta nutná pro stažení souboru
+    #path: str = Field(..., description="Cesta k souboru na disku")
 
     # gt=0 (greater than) – velikost musí být kladné číslo, prázdný soubor nedává smysl
     # Přidáno 'le' pro maximální velikost (10 MB)
@@ -113,7 +114,8 @@ class FileMetadata(BaseModel):
 
     # ... znamená povinné pole – čas nahrání je vždy nastaven databází
     created_at: datetime = Field(..., description="Čas nahrání")
-
+    volume_id: int | None = Field(default=None, description="ID svazku v Haystacku")
+    offset: int | None = Field(default=None, description="Začátek souboru v bajtech")
     # from_attributes=True umožňuje vytvořit schéma přímo z SQLAlchemy objektu:
     # FileMetadata.model_validate(db_file_object)
     model_config = {"from_attributes": True}
