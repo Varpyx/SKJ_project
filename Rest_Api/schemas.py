@@ -67,7 +67,8 @@ class FileUploadResponse(BaseModel):
 
     # SMAZANO... znamená povinné pole – cesta musí být vždy uložena pro pozdější přístup
     #path: str = Field(..., description="Cesta k souboru na disku")
-
+    volume_id: int | None = Field(default=None, description="ID svazku v Haystacku")
+    offset: int | None = Field(default=None, description="Začátek souboru v bajtech")
     # from_attributes=True umožňuje vytvořit schéma přímo z SQLAlchemy objektu:
     # FileUploadResponse.model_validate(db_file_object)
     model_config = {"from_attributes": True}
@@ -113,7 +114,8 @@ class FileMetadata(BaseModel):
 
     # ... znamená povinné pole – čas nahrání je vždy nastaven databází
     created_at: datetime = Field(..., description="Čas nahrání")
-
+    volume_id: int | None = Field(default=None, description="ID svazku v Haystacku")
+    offset: int | None = Field(default=None, description="Začátek souboru v bajtech")
     # from_attributes=True umožňuje vytvořit schéma přímo z SQLAlchemy objektu:
     # FileMetadata.model_validate(db_file_object)
     model_config = {"from_attributes": True}

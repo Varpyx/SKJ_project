@@ -381,13 +381,22 @@ async def download_file(
             detail="Soubor nebyl nalezen (byl přesunut do koše)."
         )
 
-    # KONTROLA, jestli už Haystack odpověděl (jestli už máme volume_id)
+    # --- CHYTRÉ ČEKÁNÍ (Eventual Consistency) ---
+    # Pokud se soubor ještě zapisuje do Haystacku, Gateway chvilku počká (max 2 sekundy).
     if file_record.volume_id is None:
-        raise HTTPException(
-            status_code=425,
-            detail="Soubor se ještě zapisuje na disk. Zkuste to za chvíli."
-        )
+        for _ in range(10):
+            await asyncio.sleep(0.2)  # Počkáme 200 ms
+            db.refresh(file_record)  # Znovu načteme stav z DB
+            if file_record.volume_id is not None:
+                break  # Haystack potvrdil zápis, můžeme pokračovat!
 
+        # Pokud ani po 2 sekundách Haystack neodpověděl, teprve pak vyhodíme chybu
+        if file_record.volume_id is None:
+            raise HTTPException(
+                status_code=425,
+                detail="Soubor se ještě zapisuje na disk. Zkuste to za chvíli."
+            )
+    # --------------------------------------------
     # 3) Stažení z Haystack Nodu (přes HTTP)
     async with httpx.AsyncClient() as client:
         haystack_url = f"http://127.0.0.1:8002/volume/{file_record.volume_id}/{file_record.offset}/{file_record.size}"
