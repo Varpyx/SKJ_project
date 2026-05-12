@@ -108,6 +108,10 @@
     .btn-ghost { background: transparent; color: var(--text2); border: 1px solid var(--border2); }
     .btn-ghost:hover { background: var(--surface2); color: var(--text); }
 
+    /* [broker_test] Tlačítko pro soft delete */
+    .btn-danger { background: transparent; color: var(--red); border: 1px solid rgba(239, 68, 68, 0.3); }
+    .btn-danger:hover { background: rgba(239, 68, 68, 0.1); border-color: var(--red); }
+
     /* --- Object list --- */
     .object-list { display: flex; flex-direction: column; gap: 4px; }
     .object-item {
@@ -241,15 +245,9 @@ function App() {
 
   // ── WebSocket Logic ──
   useEffect(() => {
-<<<<<<< HEAD
-    if (!selectedObj || !bucketId) { setImageUrl(null); return; }
-    setImageUrl(`${baseUrl}/download/${selectedObj.id || selectedObj.name}`);
-  }, [selectedObj, bucketId, baseUrl]);
-=======
     const connectWS = () => {
       const ws = new WebSocket("ws://localhost:8000/broker");
       wsRef.current = ws;
->>>>>>> 5dcb58423de24bbff479710bfc4fb05d14210555
 
       ws.onopen = () => {
         setConnected(true);
@@ -368,7 +366,7 @@ function App() {
       id: jobId,
       time: new Date().toLocaleTimeString(),
       op: operation,
-      fileId: selectedObj.file_id || selectedObj.id, // Fallback pro file_id/id
+      fileId: selectedObj.file_id || selectedObj.id,
       fileName: selectedObj.filename,
       status: "processing"
     }, ...prev].slice(0, 15));
@@ -383,6 +381,29 @@ function App() {
     } catch (e) {
       setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: "error" } : j));
       notify("Nepodařilo se odeslat job", "error");
+    }
+  };
+
+  // ── [broker_test] Soft Delete ──
+  const handleDelete = async () => {
+    if (!selectedObj) return;
+    if (!window.confirm(`Opravdu chcete smazat soubor "${selectedObj.filename}"?`)) return;
+
+    try {
+      const fileId = selectedObj.file_id || selectedObj.id;
+      const res = await fetch(`${baseUrl}/files/${fileId}`, {
+        method: "DELETE",
+        headers: { "x-user-id": userId }
+      });
+
+      if (!res.ok) throw new Error("Chyba při mazání");
+
+      notify("Soubor byl přesunut do koše", "success");
+      setSelectedObj(null);
+      fetchObjects();
+
+    } catch (e) {
+      notify("Nepodařilo se smazat soubor", "error");
     }
   };
 
@@ -422,44 +443,18 @@ function App() {
           <div className="sidebar-section" style={{ flex: 1 }}>
             <div className="sidebar-label">Objekty ({objects.length})</div>
             <div className="object-list">
-<<<<<<< HEAD
+              {/* [broker_test] Prázdný stav */}
               {objects.length === 0 && !loading && (
                 <div style={{ color: "var(--text3)", fontSize: 11, padding: "8px 0" }}>
                   Žádné objekty
                 </div>
               )}
-              {objects.map((obj, i) => {
-                const name = obj.name || obj.key || obj.id || `object-${i}`;
-                const id   = obj.id || obj.key || obj.name;
-                const isImg = /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(name);
-                return (
-                  <div
-                    key={id || i}
-                    className={`object-item${selectedObj === obj ? " selected" : ""}`}
-                    onClick={() => setSelectedObj(obj)}
-                  >
-                    <div className="object-icon">
-                      {isImg ? (
-                        <img
-                          src={`${baseUrl}/download/${id}`}
-                          alt=""
-                          onError={e => { e.target.style.display = "none"; }}
-                        />
-                      ) : (
-                        <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100%", fontSize:11, color:"var(--text3)" }}>
-                          📄
-                        </div>
-                      )}
-                    </div>
-                    <span className="object-name" title={name}>{name}</span>
-=======
               {objects.map(obj => (
                 <div key={obj.id} className={`object-item ${(selectedObj?.file_id || selectedObj?.id) === (obj.file_id || obj.id) ? 'selected' : ''}`} onClick={() => setSelectedObj(obj)}>
                   <div className="object-icon">
                     {/\.(jpg|jpeg|png|webp)$/i.test(obj.filename) 
                       ? <img src={`${baseUrl}/files/${obj.file_id || obj.id}`} onError={e => e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23556' stroke-width='2'/%3E%3C/svg%3E"} />
                       : "📄"}
->>>>>>> 5dcb58423de24bbff479710bfc4fb05d14210555
                   </div>
                   <span className="object-name">{obj.filename}</span>
                 </div>
@@ -472,8 +467,16 @@ function App() {
           <div className="content-inner">
             <div className="panel">
               <div className="panel-header">
-                <span className="panel-title">{selectedObj ? selectedObj.filename : "Vyberte soubor"}</span>
-                {selectedObj && <span className="text-muted text-small">{ (selectedObj.size / 1024).toFixed(1) } KB</span>}
+                {/* [broker_test] Panel header s tlačítkem Smazat */}
+                <div>
+                  <span className="panel-title">{selectedObj ? selectedObj.filename : "Vyberte soubor"}</span>
+                  {selectedObj && <span className="text-muted text-small" style={{ marginLeft: "10px" }}>{ (selectedObj.size / 1024).toFixed(1) } KB</span>}
+                </div>
+                {selectedObj && (
+                  <button className="btn-danger" onClick={handleDelete} style={{ padding: "4px 10px", fontSize: "10px", textTransform: "uppercase", fontWeight: "bold" }}>
+                    Smazat (Soft Delete)
+                  </button>
+                )}
               </div>
               <div className="image-display">
                 {selectedObj ? (
