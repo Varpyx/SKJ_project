@@ -329,7 +329,7 @@ function App() {
     }, ...prev].slice(0, 15));
 
     try {
-      const res = await fetch(`${baseUrl}/download/upload`, {
+      const res = await fetch(`${baseUrl}/files/upload`, {
         method: "POST",
         headers: { "x-user-id": userId },
         body: formData

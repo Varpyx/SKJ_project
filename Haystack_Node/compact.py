@@ -52,7 +52,8 @@ def compact_volume(volume_id: int):
             new_offset += size
 
     os.remove(old_path)
-    #os.rename(new_path, old_path) ABY VYTVOŘIL COMPACTED FILE ZAKOMETOVAT!
+    # ABY VYTVOŘIL COMPACTED FILE ZAKOMETOVAT!
+    os.rename(new_path, old_path) 
 
     new_size = os.path.getsize(old_path)
     saved = old_size - new_size
