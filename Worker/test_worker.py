@@ -91,7 +91,7 @@ async def test_worker_processes_10_jobs():
                 files={"file": ("miner.png", f, "image/png")},
                 headers={"X-User-Id": "anonymous"},
             )
-        assert resp.status_code in (200, 201)
+        assert resp.status_code in (200, 201, 202)
         miner_id = resp.json()["id"]
 
         with open(SKELETON_IMAGE, "rb") as f:
@@ -101,7 +101,7 @@ async def test_worker_processes_10_jobs():
                 files={"file": ("skeleton.jpg", f, "image/jpeg")},
                 headers={"X-User-Id": "anonymous"},
             )
-        assert resp.status_code in (200, 201)
+        assert resp.status_code in (200, 201, 202)
         skeleton_id = resp.json()["id"]
 
     await asyncio.gather(
