@@ -250,6 +250,7 @@ function App() {
 
       ws.onopen = () => {
         setConnected(true);
+        // Odebíráme POUZE zprávy od workera, nikoliv storage.ack, abychom zprávu neukradli Gatewayi!
         ws.send(JSON.stringify({ action: "subscribe", topic: "image.done" }));
       };
 
@@ -260,6 +261,7 @@ function App() {
         const payload = data.payload;
         const topic = data.topic;
 
+        // --- Zpracování výsledku úpravy (Worker) ---
         if (topic === "image.done") {
           setJobs(prev => prev.map(job => {
             if (job.fileId === payload.file_id || job.id.toString() === payload.job_id) {
@@ -315,6 +317,7 @@ function App() {
 
     const jobId = Date.now();
     
+    // Přidání uploadu do historie IHNED
     setJobs(prev => [{
       id: jobId,
       time: new Date().toLocaleTimeString(),
@@ -335,6 +338,9 @@ function App() {
       if (!res.ok) throw new Error();
       notify("Odesláno na Gateway, čekám na zápis na disk...", "info");
 
+      // Spoléháme na lokální rychlost Haystacku (zápis v milisekundách).
+      // Záměrně počkáme 1,5 sekundy, aby Gateway bezpečně zpracovala storage.ack,
+      // pak job označíme jako hotový a stáhneme obnovený seznam.
       setTimeout(() => {
         setJobs(prev => prev.map(j => j.id === jobId ? { ...j, fileId: data.id, status: "done" } : j));
         fetchObjects();
@@ -359,7 +365,7 @@ function App() {
       id: jobId,
       time: new Date().toLocaleTimeString(),
       op: operation,
-      fileId: selectedObj.file_id || selectedObj.id,
+      fileId: selectedObj.file_id || selectedObj.id, // Fallback pro file_id/id
       fileName: selectedObj.filename,
       status: "processing"
     }, ...prev].slice(0, 15));
@@ -494,6 +500,7 @@ function App() {
                   </button>
                 </div>
 
+                {/* ── Přidané dynamické parametry operací ── */}
                 {currentOp && currentOp.params.length > 0 && (
                   <div className="sidebar-section" style={{ marginTop: '12px' }}>
                     <div className="sidebar-label">Parametry (Jas / Ořez)</div>
