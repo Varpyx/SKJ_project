@@ -3,7 +3,7 @@ main.py – Hlavní FastAPI aplikace (Object Storage Service)
 Spuštění: uvicorn main:app --reload --port 8001
 """
 
-from typing import Optional
+from typing import Optional, Literal
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Depends, FastAPI, Header, HTTPException, UploadFile, File as FastAPIFile, Form
 from fastapi.responses import Response
@@ -30,7 +30,7 @@ models.Base.metadata.create_all(bind=engine)
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 
 class ImageProcessRequest(BaseModel):
-    operation: str
+    operation: Literal["grayscale", "invert", "flip", "brightness", "crop"]
     params: dict = {}
 
 async def send_to_broker(payload: dict):
