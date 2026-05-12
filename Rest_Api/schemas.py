@@ -144,6 +144,16 @@ class FileListResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Schéma pro potvrzení smazání
 # ---------------------------------------------------------------------------
+class VolumeObjectInfo(BaseModel):
+    """Schéma pro objekt ve svazku při kompakci."""
+    file_id: str
+    offset: int
+    size: int
+    volume_id: int
+
+    model_config = {"from_attributes": True}
+
+
 class DeleteResponse(BaseModel):
     """
     Vráceno po úspěšném DELETE /files/{id}.

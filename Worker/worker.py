@@ -99,9 +99,9 @@ async def worker_loop():
 
                     print(f"\n📥 Přijat job: {operation} na souboru {file_id} (Kbelík: {bucket_id})")
 
-                    # 1. Stáhneme obrázek ze S3 (Použijeme správný endpoint /files/{file_id} a hlavičku)
+                    # 1. Stáhneme obrázek ze S3 (Použijeme endpoint /download/{object_id} a hlavičku)
                     headers = {"X-User-Id": user_id}
-                    s3_download_url = f"{S3_API_URL}/files/{file_id}"
+                    s3_download_url = f"{S3_API_URL}/download/{file_id}"
                     img_resp = await client.get(s3_download_url, headers=headers)
 
                     if img_resp.status_code != 200:

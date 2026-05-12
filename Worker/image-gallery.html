@@ -108,6 +108,10 @@
     .btn-ghost { background: transparent; color: var(--text2); border: 1px solid var(--border2); }
     .btn-ghost:hover { background: var(--surface2); color: var(--text); }
 
+    /* [broker_test] Tlačítko pro soft delete */
+    .btn-danger { background: transparent; color: var(--red); border: 1px solid rgba(239, 68, 68, 0.3); }
+    .btn-danger:hover { background: rgba(239, 68, 68, 0.1); border-color: var(--red); }
+
     /* --- Object list --- */
     .object-list { display: flex; flex-direction: column; gap: 4px; }
     .object-item {
@@ -362,7 +366,7 @@ function App() {
       id: jobId,
       time: new Date().toLocaleTimeString(),
       op: operation,
-      fileId: selectedObj.file_id || selectedObj.id, // Fallback pro file_id/id
+      fileId: selectedObj.file_id || selectedObj.id,
       fileName: selectedObj.filename,
       status: "processing"
     }, ...prev].slice(0, 15));
@@ -377,6 +381,29 @@ function App() {
     } catch (e) {
       setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: "error" } : j));
       notify("Nepodařilo se odeslat job", "error");
+    }
+  };
+
+  // ── [broker_test] Soft Delete ──
+  const handleDelete = async () => {
+    if (!selectedObj) return;
+    if (!window.confirm(`Opravdu chcete smazat soubor "${selectedObj.filename}"?`)) return;
+
+    try {
+      const fileId = selectedObj.file_id || selectedObj.id;
+      const res = await fetch(`${baseUrl}/files/${fileId}`, {
+        method: "DELETE",
+        headers: { "x-user-id": userId }
+      });
+
+      if (!res.ok) throw new Error("Chyba při mazání");
+
+      notify("Soubor byl přesunut do koše", "success");
+      setSelectedObj(null);
+      fetchObjects();
+
+    } catch (e) {
+      notify("Nepodařilo se smazat soubor", "error");
     }
   };
 
@@ -416,6 +443,12 @@ function App() {
           <div className="sidebar-section" style={{ flex: 1 }}>
             <div className="sidebar-label">Objekty ({objects.length})</div>
             <div className="object-list">
+              {/* [broker_test] Prázdný stav */}
+              {objects.length === 0 && !loading && (
+                <div style={{ color: "var(--text3)", fontSize: 11, padding: "8px 0" }}>
+                  Žádné objekty
+                </div>
+              )}
               {objects.map(obj => (
                 <div key={obj.id} className={`object-item ${(selectedObj?.file_id || selectedObj?.id) === (obj.file_id || obj.id) ? 'selected' : ''}`} onClick={() => setSelectedObj(obj)}>
                   <div className="object-icon">
@@ -434,8 +467,16 @@ function App() {
           <div className="content-inner">
             <div className="panel">
               <div className="panel-header">
-                <span className="panel-title">{selectedObj ? selectedObj.filename : "Vyberte soubor"}</span>
-                {selectedObj && <span className="text-muted text-small">{ (selectedObj.size / 1024).toFixed(1) } KB</span>}
+                {/* [broker_test] Panel header s tlačítkem Smazat */}
+                <div>
+                  <span className="panel-title">{selectedObj ? selectedObj.filename : "Vyberte soubor"}</span>
+                  {selectedObj && <span className="text-muted text-small" style={{ marginLeft: "10px" }}>{ (selectedObj.size / 1024).toFixed(1) } KB</span>}
+                </div>
+                {selectedObj && (
+                  <button className="btn-danger" onClick={handleDelete} style={{ padding: "4px 10px", fontSize: "10px", textTransform: "uppercase", fontWeight: "bold" }}>
+                    Smazat (Soft Delete)
+                  </button>
+                )}
               </div>
               <div className="image-display">
                 {selectedObj ? (
