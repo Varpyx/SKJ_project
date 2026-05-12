@@ -265,9 +265,9 @@ async def download_file(
     # 5) Vrať soubor jako HTTP response
     return Response(
         content=file_content,
-        media_type="application/octet-stream",  # generický binární typ
+        media_type="image/jpeg",  # generický binární typ
         headers={
-            "Content-Disposition": f'attachment; filename="{file_record.filename}"',
+            "Content-Disposition": f'inline; filename="{file_record.filename}"',
             "X-File-Id": file_record.file_id,
             "X-File-Size": str(file_record.size),
         },
