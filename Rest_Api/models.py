@@ -86,9 +86,13 @@ class File(Base):
 
     is_deleted: Mapped[bool] = mapped_column(default=False)  # pro logické mazání
 
-    # PŘIDÁNO: Haystack metadata (mohou být None, dokud nepřijde ACK od Brokera)
+    # PŘIDÁNO: Haystack metadata
     volume_id: Mapped[int | None] = mapped_column()
     offset: Mapped[int | None] = mapped_column()
+    
+    # NOVÉ SLOUPCE PRO ÚKOL 2:
+    status: Mapped[str] = mapped_column(String, default="uploading")
+    is_internal: Mapped[bool] = mapped_column(default=False)
 
     def __repr__(self) -> str:
         """Textová reprezentace objektu – užitečné při debugování."""

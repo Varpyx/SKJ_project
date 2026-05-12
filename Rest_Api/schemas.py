@@ -69,6 +69,8 @@ class FileUploadResponse(BaseModel):
     #path: str = Field(..., description="Cesta k souboru na disku")
     volume_id: int | None = Field(default=None, description="ID svazku v Haystacku")
     offset: int | None = Field(default=None, description="Začátek souboru v bajtech")
+    status: str = Field(default="uploading", description="Stav: uploading, ready, error")
+    
     # from_attributes=True umožňuje vytvořit schéma přímo z SQLAlchemy objektu:
     # FileUploadResponse.model_validate(db_file_object)
     model_config = {"from_attributes": True}
@@ -84,7 +86,7 @@ class FileMetadata(BaseModel):
     """
 
     # ... znamená povinné pole – UUID jednoznačně identifikuje soubor
-    id: str = Field(..., description="UUID souboru")
+    id: str = Field(...,alias = "file_id", description="UUID souboru")
 
     # user_id používáme k tvorbě složek na disku, musí být extrémně bezpečné!
     # Povolíme jen písmena, čísla, podtržítka a pomlčky. Žádné mezery a lomenítka.
@@ -116,9 +118,11 @@ class FileMetadata(BaseModel):
     created_at: datetime = Field(..., description="Čas nahrání")
     volume_id: int | None = Field(default=None, description="ID svazku v Haystacku")
     offset: int | None = Field(default=None, description="Začátek souboru v bajtech")
+    status: str = Field(default="uploading", description="Stav: uploading, ready, error")
+    
     # from_attributes=True umožňuje vytvořit schéma přímo z SQLAlchemy objektu:
     # FileMetadata.model_validate(db_file_object)
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "populate_by_name": True}
 
 
 # ---------------------------------------------------------------------------

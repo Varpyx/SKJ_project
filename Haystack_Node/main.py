@@ -1,3 +1,7 @@
+"""
+main.py - Haystack Node
+Spuštění: uvicorn main:app --reload --port 8002
+"""
 import os
 import asyncio
 import msgpack
@@ -7,20 +11,16 @@ from contextlib import asynccontextmanager
 
 from haystack import HaystackManager
 
-# Nastavení
 BROKER_URI = "ws://127.0.0.1:8000/broker"
 manager = HaystackManager(storage_dir="volumes", max_size_mb=100)
-
 
 async def broker_listener():
     """Tato funkce běží na pozadí a naslouchá zprávám z brokera."""
     print("🎧 Haystack Node se připojuje k Brokeru...")
 
-    # Zabalili jsme to do while True pro automatický reconnect,
-    # kdyby Broker na chvíli spadl.
     while True:
         try:
-            async with websockets.connect(BROKER_URI) as ws:
+            async with websockets.connect(BROKER_URI, max_size=None) as ws:
                 # 1. Přihlášení k tématu pro zápis přes MessagePack
                 subscribe_msg = {"action": "subscribe", "topic": "storage.write"}
                 await ws.send(msgpack.packb(subscribe_msg))
@@ -28,7 +28,6 @@ async def broker_listener():
 
                 # 2. Smyčka pro příjem dat
                 while True:
-                    # Přijmeme binární zprávu a rozbalíme ji
                     message = await ws.recv()
                     data = msgpack.unpackb(message)
 
@@ -76,34 +75,24 @@ async def broker_listener():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Spravuje životní cyklus aplikace (spuštění a vypnutí)."""
-    # Spustíme naslouchání brokeru jako task na pozadí, ať neblokuje API
     listener_task = asyncio.create_task(broker_listener())
     yield
-    # Akce při vypnutí serveru
     listener_task.cancel()
     manager.close()
     print("🛑 Haystack Node bezpečně ukončen.")
 
-
-# Inicializace FastAPI
 app = FastAPI(lifespan=lifespan)
-
 
 @app.get("/volume/{volume_id}/{offset}/{size}")
 def read_needle(volume_id: int, offset: int, size: int):
-    """
-    HTTP Endpoint pro rychlé čtení.
-    Najde správný volume, přeskočí na 'offset' a přečte 'size' bajtů.
-    """
+    """HTTP Endpoint pro rychlé čtení."""
     filepath = os.path.join(manager.storage_dir, f"volume_{volume_id}.dat")
 
     if not os.path.exists(filepath):
         return Response(status_code=404, content="Svazek nenalezen")
 
-    # Režim 'rb' je čisté čtení v binárním módu
     with open(filepath, "rb") as f:
         f.seek(offset)
         image_data = f.read(size)
 
-    # Vracíme rovnou zkompletovaný obrázek (jako raw bajty)
     return Response(content=image_data, media_type="image/jpeg")
