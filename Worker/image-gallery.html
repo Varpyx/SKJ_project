@@ -484,7 +484,7 @@ function App() {
   // Load image URL when object selected
   useEffect(() => {
     if (!selectedObj || !bucketId) { setImageUrl(null); return; }
-    setImageUrl(`${baseUrl}/files/${selectedObj.id || selectedObj.name}`);
+    setImageUrl(`${baseUrl}/download/${selectedObj.id || selectedObj.name}`);
   }, [selectedObj, bucketId, baseUrl]);
 
   // ── Fetch objects ──
@@ -597,7 +597,7 @@ function App() {
                     <div className="object-icon">
                       {isImg ? (
                         <img
-                          src={`${baseUrl}/files/${id}`}
+                          src={`${baseUrl}/download/${id}`}
                           alt=""
                           onError={e => { e.target.style.display = "none"; }}
                         />

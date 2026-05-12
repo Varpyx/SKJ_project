@@ -33,14 +33,14 @@ GET http://localhost:8000/buckets/1/objects/
 ### 4. Stáhni soubor.
 # pokud byl soubor nahran s User-Id, je nutne
 # tento atribut pouzit i pro stahovani jeho souboru 
-GET http://localhost:8000/files/{zde-vloz-id-souboru}
+GET http://localhost:8000/download/{zde-vloz-id-souboru}
 X-User-Id: john
 
 ### 5. Zobraz billing po downloadu
 GET http://localhost:8000/buckets/1/billing/
 
 ### 6. Smaž soubor
-DELETE http://localhost:8000/files/{zde-vloz-id-souboru}
+DELETE http://localhost:8000/download/{zde-vloz-id-souboru}
 X-User-Id: john
 
 ### 7. Zobraz billing po smazání

@@ -18,7 +18,7 @@ Architektura:
     storage.py  ← fyzické soubory na disku
 """
 
-from typing import Optional
+from typing import List, Optional
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Depends, FastAPI, Header, HTTPException, UploadFile, File as FastAPIFile, Form
 from fastapi.responses import Response
@@ -348,22 +348,22 @@ def list_files(
 # ENDPOINT 3 – Stažení souboru
 # ===========================================================================
 @app.get(
-    "/files/{file_id}",
+    "/download/{object_id}",
     summary="Stáhni soubor",
-    tags=["files"],
+    tags=["download"],
     responses={
         200: {"description": "Obsah souboru (binární data)"},
         404: {"description": "Soubor nenalezen"},
     },
 )
 async def download_file(
-    file_id: str,
+    object_id: str,
     x_user_id: Optional[str] = Header(default="anonymous", description="ID uživatele"),
     x_internal_source: Optional[str] = Header(default=None, description="Pokud true, počítá se jako interní transfer"),
     db: Session = Depends(get_db),
 ):
     """
-    **GET /files/{file_id}**
+    **GET /download/{object_id}**
 
     Stáhne obsah souboru. 
     Respektuje Soft Delete – smazané soubory vrátí chybu 404.
@@ -372,7 +372,7 @@ async def download_file(
     - Vrátí binární obsah souboru s hlavičkou Content-Disposition
     """
     # 1) Ověř existenci záznamu v DB a přístupová práva
-    file_record = get_file_or_404(file_id, x_user_id, db)
+    file_record = get_file_or_404(object_id, x_user_id, db)
 
     # 2) FILTR SOFT DELETE: Zabrání stažení smazaného souboru
     if file_record.is_deleted:
@@ -432,18 +432,18 @@ async def download_file(
 # ENDPOINT 4 – Smazání souboru
 # ===========================================================================
 @app.delete(
-    "/files/{file_id}",
+    "/download/{object_id}",
     response_model=schemas.DeleteResponse,
     summary="Smaž soubor (Soft Delete)",
-    tags=["files"],
+    tags=["download"],
 )
 def delete_file(
-    file_id: str,
+    object_id: str,
     x_user_id: Optional[str] = Header(default="anonymous", description="ID uživatele"),
     db: Session = Depends(get_db),
 ):
     """
-    **DELETE /files/{file_id}**
+    **DELETE /download/{object_id}**
 
     Provádí 'Soft Delete' souboru. Soubor zůstává na disku i v DB, 
     ale je označen jako smazaný a nebude se zobrazovat v běžných výpisech.
@@ -453,7 +453,7 @@ def delete_file(
     - Fyzický soubor na disku ZŮSTÁVÁ pro možnost obnovy
     """
     # 1) Ověř existenci záznamu v DB a přístupová práva
-    file_record = get_file_or_404(file_id, x_user_id, db)
+    file_record = get_file_or_404(object_id, x_user_id, db)
 
     # Kontrola, zda už soubor není smazaný (abychom neodečítali velikost vícekrát)
     if file_record.is_deleted:
@@ -586,3 +586,37 @@ def get_bucket_billing(bucket_id: int, db: Session = Depends(get_db)):
         egress_bytes=bucket.egress_bytes,
         internal_transfer_bytes=bucket.internal_transfer_bytes
     )
+
+
+# ===========================================================================
+# ADMIN ENDPOINTY — pro kompakci volume skriptem compact.py
+# ===========================================================================
+
+@app.get(
+    "/admin/volume/{volume_id}/objects",
+    response_model=List[schemas.VolumeObjectInfo],
+    tags=["admin"],
+)
+def get_volume_objects(volume_id: int, db: Session = Depends(get_db)):
+    """Vrátí všechny nesmazané soubory v daném svazku, seřazené podle offsetu."""
+    files = (
+        db.query(models.File)
+        .filter(
+            models.File.volume_id == volume_id,
+            models.File.is_deleted == False,
+        )
+        .order_by(models.File.offset)
+        .all()
+    )
+    return files
+
+
+@app.put("/admin/objects/{file_id}/relocate", tags=["admin"])
+def relocate_object(file_id: str, new_offset: int, db: Session = Depends(get_db)):
+    """Aktualizuje offset souboru po kompakci."""
+    file_record = db.query(models.File).filter(models.File.file_id == file_id).first()
+    if not file_record:
+        raise HTTPException(status_code=404, detail="Soubor nenalezen.")
+    file_record.offset = new_offset
+    db.commit()
+    return {"status": "ok"}
