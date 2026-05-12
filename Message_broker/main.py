@@ -3,33 +3,17 @@ import json
 import msgpack
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+
 import schemas
 import database
 from models import QueuedMessage
-import database
-from models import QueuedMessage  # import so Base sees it
 
-
-DATABASE_URL = "sqlite:///./broker.db"
-
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
 
 app = FastAPI(
     title="Pub/Sub Message Broker",
     description="Message broker s perzistentními frontami (Durable Queues)."
 )
 
-
-
-
-@app.on_event("startup")
-async def startup():
-    database.Base.metadata.create_all(bind=database.engine)  # ← this was missing
-    print("[BROKER] Databáze inicializována.")
 
 class ConnectionManager:
     def __init__(self):

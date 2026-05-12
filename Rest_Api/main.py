@@ -1,6 +1,21 @@
 """
 main.py – Hlavní FastAPI aplikace (Object Storage Service)
-Spuštění: uvicorn main:app --reload --port 8001
+
+Spuštění:
+    uvicorn main:app --reload --port 8000
+
+Dokumentace API (automaticky generovaná FastAPI):
+    http://localhost:8000/docs   ← Swagger UI
+    http://localhost:8000/redoc  ← ReDoc
+
+Architektura:
+    HTTP Request
+        ↓
+    FastAPI endpoint (main.py)
+        ↓
+    SQLAlchemy (database.py + models.py)  ← metadata
+        ↓
+    storage.py  ← fyzické soubory na disku
 """
 
 from typing import Optional
@@ -12,6 +27,7 @@ from sqlalchemy.exc import IntegrityError
 
 import models
 import schemas
+import storage
 from database import Base, engine, get_db, SessionLocal
 
 import json
@@ -27,12 +43,20 @@ from contextlib import asynccontextmanager
 
 models.Base.metadata.create_all(bind=engine)
 
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB v bytech
+# ---------------------------------------------------------------------------
+# Inicializace databáze
+# ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# FastAPI aplikace
+# ---------------------------------------------------------------------------
+# Schéma pro požadavek na zpracování
 class ImageProcessRequest(BaseModel):
     operation: str
     params: dict = {}
 
+# Pomocná funkce pro komunikaci s Brokerem
 async def send_to_broker(payload: dict):
     try:
         async with websockets.connect("ws://localhost:8000/broker") as websocket:
@@ -45,11 +69,13 @@ async def send_to_broker(payload: dict):
     except Exception as e:
         print(f"Chyba při odesílání do Brokera: {e}")
 
+
 async def haystack_ack_listener():
-    """Naslouchá potvrzením z Haystacku, ukládá metadata a řeší odložený billing."""
+    """Naslouchá potvrzením z Haystacku a ukládá volume_id a offset do databáze."""
     while True:
         try:
             async with websockets.connect("ws://127.0.0.1:8000/broker") as ws:
+                # Přihlášení k tématu storage.ack
                 await ws.send(msgpack.packb({"action": "subscribe", "topic": "storage.ack"}))
                 print("✅ S3 Gateway naslouchá na 'storage.ack'")
 
@@ -62,35 +88,19 @@ async def haystack_ack_listener():
                         file_id = payload.get("object_id")
                         message_id = data.get("message_id")
 
+                        # Aktualizace databáze
                         db = SessionLocal()
                         try:
                             db_file = db.query(models.File).filter(models.File.file_id == file_id).first()
-                            
-                            # ÚKOL 2: Zpracujeme pouze soubory, které čekají na upload
-                            if db_file and db_file.status != "ready":
+                            if db_file:
                                 db_file.volume_id = payload.get("volume_id")
                                 db_file.offset = payload.get("offset")
-                                if "size" in payload:
-                                    db_file.size = payload.get("size")
-                                
-                                # 1. Eventual Consistency: Soubor je konečně fyzicky zapsán
-                                db_file.status = "ready"
-                                
-                                # 2. Odložený billing: Až teď zaúčtujeme transfer!
-                                if db_file.bucket_id:
-                                    bucket = db.query(models.Bucket).filter(models.Bucket.id == db_file.bucket_id).first()
-                                    if bucket:
-                                        bucket.current_storage_bytes += db_file.size
-                                        if db_file.is_internal:
-                                            bucket.internal_transfer_bytes += db_file.size
-                                        else:
-                                            bucket.ingress_bytes += db_file.size
-
                                 db.commit()
-                                print(f"✅ Metadata uložena pro soubor {file_id}. Status -> ready.")
+                                print(f"✅ Metadata uložena pro soubor {file_id}")
                         finally:
                             db.close()
 
+                        # Odeslání ACK Brokeru
                         if message_id:
                             await ws.send(msgpack.packb({"action": "ack", "message_id": message_id}))
         except Exception as e:
@@ -103,75 +113,149 @@ async def lifespan(app: FastAPI):
     yield
     task.cancel()
 
+# 1. NEJPRVE vytvoř aplikaci
 app = FastAPI(
     title="Object Storage Service",
     lifespan=lifespan,
+    description=(
+        "Jednoduchá object storage služba inspirovaná Amazon S3.\n\n"
+        "Umožňuje nahrávání, stahování, výpis a mazání souborů.\n"
+        "Každý uživatel má vlastní izolovaný prostor v úložišti."
+    ),
     version="1.0.0",
 )
 
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-
+# 2. AŽ POTOM přidej CORS middleware
+app.add_middleware(
+    CORSMiddleware, 
+    allow_origins=["*"], 
+    allow_methods=["*"], 
+    allow_headers=["*"]
+)
+# NOVÝ ENDPOINT: Spuštění zpracování obrázku
 @app.post("/buckets/{bucket_id}/objects/{file_id}/process", tags=["process"])
-async def process_image(bucket_id: int, file_id: str, request: ImageProcessRequest, background_tasks: BackgroundTasks, x_user_id: Optional[str] = Header(default="anonymous"), db: Session = Depends(get_db)):
+async def process_image(
+        bucket_id: int,
+        file_id: str,
+        request: ImageProcessRequest,
+        background_tasks: BackgroundTasks,
+        x_user_id: Optional[str] = Header(default="anonymous"),
+        db: Session = Depends(get_db)
+):
+    # 1. Ověříme, že soubor existuje a patří uživateli
     get_file_or_404(file_id, x_user_id, db)
+
+    # 2. Příprava dat pro Workera
     job_payload = {
-        "bucket_id": bucket_id, "file_id": file_id, "user_id": x_user_id,
-        "operation": request.operation, "params": request.params
+        "bucket_id": bucket_id,
+        "file_id": file_id,
+        "user_id": x_user_id,
+        "operation": request.operation,
+        "params": request.params
     }
+
+    # 3. Odeslání zprávy na pozadí
     background_tasks.add_task(send_to_broker, job_payload)
+
     return {"status": "processing_started", "file_id": file_id}
 
+
+# ---------------------------------------------------------------------------
+# Pomocná funkce – ověření přístupu k souboru
+# ---------------------------------------------------------------------------
 def get_file_or_404(file_id: str, user_id: str, db: Session) -> models.File:
-    file_record = db.query(models.File).filter(models.File.file_id == file_id, models.File.user_id == user_id).first()
+    """
+    Načte soubor z databáze a ověří, že patří danému uživateli.
+
+    Parametry:
+        file_id – UUID souboru (z URL)
+        user_id – ID uživatele (z HTTP hlavičky X-User-Id)
+        db      – databázová session
+
+    Vrátí:
+        models.File objekt z databáze
+
+    Vyhodí:
+        HTTPException 404 – soubor neexistuje nebo nepatří uživateli
+    """
+    # Dotaz do DB: najdi soubor s daným file_id a user_id
+    file_record = (
+        db.query(models.File)
+        .filter(
+            models.File.file_id == file_id,
+            models.File.user_id == user_id,
+        )
+        .first()
+    )
+
     if file_record is None:
-        raise HTTPException(status_code=404, detail="Soubor nenalezen nebo k němu nemáte přístup.")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Soubor s ID '{file_id}' nebyl nalezen nebo k němu nemáte přístup.",
+        )
+
     return file_record
 
+
+# ===========================================================================
+# ENDPOINT 1 – Nahrání souboru
+# ===========================================================================
 @app.post(
     "/files/upload",
     response_model=schemas.FileUploadResponse,
-    status_code=202, # ÚKOL 2: Změněno na 202 Accepted
+    status_code=201,
+    summary="Nahraj soubor",
     tags=["files"],
 )
 async def upload_file(
-    file: UploadFile = FastAPIFile(...),
-    bucket_id: int = Form(...),
-    x_user_id: Optional[str] = Header(default="anonymous"),
-    x_internal_source: Optional[str] = Header(default=None),
+    file: UploadFile = FastAPIFile(..., description="Soubor k nahrání (multipart/form-data)"),
+    bucket_id: int = Form(..., description="ID bucketu, do kterého se má soubor nahrát"),
+    x_user_id: Optional[str] = Header(default="anonymous", description="ID uživatele"),
+    x_internal_source: Optional[str] = Header(default=None, description="Pokud true, počítá se jako interní transfer"),
     db: Session = Depends(get_db),
 ):
+    """
+    **POST /files/upload**
+
+    Nahraje soubor na server a uloží jeho metadata do databáze.
+
+    - Soubor se pošle jako `multipart/form-data` (pole `file`)
+    - Uživatel se identifikuje hlavičkou `X-User-Id`
+    - Vrátí JSON s ID, názvem a velikostí souboru
+
+    Postup zpracování:
+    1. FastAPI automaticky parsuje multipart request a předá `UploadFile` objekt
+    2. Přečteme binární obsah souboru
+    3. Vygenerujeme UUID identifikátor
+    4. Uložíme soubor na disk (do storage/<user_id>/<file_id>)
+    5. Uložíme metadata do SQLite databáze
+    6. Vrátíme odpověď s metadaty
+    """
+    # 0) KONTROLA BUCKETU - Musíme ověřit, jestli cílový bucket vůbec existuje
     bucket = db.query(models.Bucket).filter(models.Bucket.id == bucket_id).first()
     if not bucket:
-        raise HTTPException(status_code=404, detail="Bucket neexistuje.")
-    
+        raise HTTPException(status_code=404, detail=f"Cílový bucket s ID {bucket_id} neexistuje.")
+    # 1) Přečti celý obsah souboru do paměti (jako bytes)
+    # Pro velmi velké soubory bychom četli po částech (streaming), ale
+    # pro účely tohoto projektu je přečtení celého souboru v pořádku.
     file_content = await file.read()
+
     if len(file_content) == 0:
-        raise HTTPException(status_code=400, detail="Soubor je prázdný.")
+        raise HTTPException(status_code=400, detail="Nahraný soubor je prázdný.")
+
+
+    # 2. KONTROLA: Není soubor příliš velký?
     if len(file_content) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=413, detail="Soubor je příliš velký.")
+        raise HTTPException(
+            status_code=413,  # 413 Payload Too Large je správný HTTP kód pro tuto chybu
+            detail=f"Soubor je příliš velký. Maximální povolená velikost je {MAX_FILE_SIZE / 1024 / 1024} MB."
+        )
 
     file_id = str(uuid.uuid4())
 
-    # 1. NEJPRVE ULOŽÍME DO DATABÁZE (Status: uploading)
-    db_file = models.File(
-        file_id=file_id,
-        user_id=x_user_id,
-        bucket_id=bucket_id,
-        filename=file.filename or "unnamed",
-        size=len(file_content),
-        volume_id=None,
-        offset=None,
-        status="uploading",
-        is_internal=(x_internal_source == "true")
-    )
-    db.add(db_file)
-    db.commit()
-    db.refresh(db_file)
-
-    # 2. AŽ POTOM ODEŠLEME DO BROKERA
+    # Odeslání fotky přes Broker do Haystacku v MessagePacku
     try:
-        # PŘIDÁNO: max_size=None (Tohle zabrání padání na větších fotkách)
-        async with websockets.connect("ws://localhost:8000/broker", max_size=None) as ws:
+        async with websockets.connect("ws://localhost:8000/broker") as ws:
             pub_msg = {
                 "action": "publish",
                 "topic": "storage.write",
@@ -182,50 +266,148 @@ async def upload_file(
             }
             await ws.send(msgpack.packb(pub_msg))
     except Exception as e:
-        # PŘIDÁNO: Výpis chyby do konzole, ať nejsme slepí!
-        print(f"❌ FATAL ERROR PŘI ODESÍLÁNÍ DO BROKERA: {e}")
-        raise HTTPException(status_code=500, detail=f"Nelze odeslat data: {e}")
+        raise HTTPException(status_code=500, detail="Nelze odeslat data do Haystack node.")
 
-    # 3. Vracíme rovnou odpověď
+    # 4) Vytvoř záznam metadat v databázi
+    db_file = models.File(
+        file_id=file_id,
+        user_id=x_user_id,
+        bucket_id=bucket_id,  # <-- Propojení souboru s bucketem!
+        filename=file.filename or "unnamed",
+        size=len(file_content),
+        volume_id=None,
+        offset=None
+    )
+    db.add(db_file)      # přidej objekt do session (zatím jen v paměti)
+    bucket.current_storage_bytes += len(file_content)
+    if x_internal_source == "true":
+        bucket.internal_transfer_bytes += len(file_content)
+    else:
+        bucket.ingress_bytes += len(file_content)
+    db.commit()          # zapiš do databáze (trvalé uložení)
+    db.refresh(db_file)  # načti zpět aktualizovaná data (např. created_at)
+
+    # 5) Vrať odpověď – FastAPI automaticky serializuje do JSON
     return schemas.FileUploadResponse(
-    id=db_file.file_id,        # Správně namapujeme file_id (UUID) na id !
-    filename=db_file.filename,
-    size=db_file.size,
-    volume_id=db_file.volume_id,
-    offset=db_file.offset,
-    status=db_file.status
+        id=db_file.file_id,
+        filename=db_file.filename,
+        size=db_file.size
+    )
+
+# ===========================================================================
+# ENDPOINT 2 – Výpis souborů uživatele
+# ===========================================================================
+@app.get(
+    "/files",
+    response_model=schemas.FileListResponse,
+    summary="Zobraz seznam souborů",
+    tags=["files"],
 )
+def list_files(
+    x_user_id: Optional[str] = Header(default="anonymous", description="ID uživatele"),
+    db: Session = Depends(get_db),
+):
+    """
+    **GET /files**
 
-@app.get("/files", response_model=schemas.FileListResponse, tags=["files"])
-def list_files(x_user_id: Optional[str] = Header(default="anonymous"), db: Session = Depends(get_db)):
-    file_records = db.query(models.File).filter(models.File.user_id == x_user_id, models.File.is_deleted == False).order_by(models.File.created_at.desc()).all()
-    files_metadata = [schemas.FileMetadata.model_validate(f) for f in file_records]
-    return schemas.FileListResponse(files=files_metadata, total=len(files_metadata))
+    Vrátí seznam všech souborů přihlášeného uživatele s jejich metadaty.
 
-@app.get("/files/{file_id}", tags=["files"])
-async def download_file(file_id: str, x_user_id: Optional[str] = Header(default="anonymous"), x_internal_source: Optional[str] = Header(default=None), db: Session = Depends(get_db)):
+    - Uživatel vidí POUZE své vlastní soubory (filtrování podle X-User-Id)
+    - Soubory jsou seřazeny od nejnovějšího
+    """
+    # Dotaz: všechny záznamy daného uživatele, seřazené sestupně podle created_at
+    file_records = (
+        db.query(models.File)
+        .filter(models.File.user_id == x_user_id, models.File.is_deleted == False)  # Zobrazujeme pouze nesmazané soubory
+        .order_by(models.File.created_at.desc())
+        .all()
+    )
+
+    # Převeď SQLAlchemy objekty na Pydantic schémata
+    files_metadata = [
+        schemas.FileMetadata(
+            id=f.file_id,
+            user_id=f.user_id,
+            filename=f.filename,
+            size=f.size,
+            #path = f.path,
+            created_at=f.created_at,
+            volume_id=f.volume_id,  # <--- PŘIDEJ TOTO
+            offset=f.offset
+        )
+        for f in file_records
+    ]
+
+    return schemas.FileListResponse(
+        files=files_metadata,
+        total=len(files_metadata),
+    )
+
+
+# ===========================================================================
+# ENDPOINT 3 – Stažení souboru
+# ===========================================================================
+@app.get(
+    "/files/{file_id}",
+    summary="Stáhni soubor",
+    tags=["files"],
+    responses={
+        200: {"description": "Obsah souboru (binární data)"},
+        404: {"description": "Soubor nenalezen"},
+    },
+)
+async def download_file(
+    file_id: str,
+    x_user_id: Optional[str] = Header(default="anonymous", description="ID uživatele"),
+    x_internal_source: Optional[str] = Header(default=None, description="Pokud true, počítá se jako interní transfer"),
+    db: Session = Depends(get_db),
+):
+    """
+    **GET /files/{file_id}**
+
+    Stáhne obsah souboru. 
+    Respektuje Soft Delete – smazané soubory vrátí chybu 404.
+
+    - Ověří, že soubor existuje a není v koši (is_deleted=False)
+    - Vrátí binární obsah souboru s hlavičkou Content-Disposition
+    """
+    # 1) Ověř existenci záznamu v DB a přístupová práva
     file_record = get_file_or_404(file_id, x_user_id, db)
 
+    # 2) FILTR SOFT DELETE: Zabrání stažení smazaného souboru
     if file_record.is_deleted:
-        raise HTTPException(status_code=404, detail="Soubor byl smazán.")
+        raise HTTPException(
+            status_code=404,
+            detail="Soubor nebyl nalezen (byl přesunut do koše)."
+        )
 
-    # ÚKOL 3: Čekání na status ready
-    if file_record.status != "ready":
+    # --- CHYTRÉ ČEKÁNÍ (Eventual Consistency) ---
+    # Pokud se soubor ještě zapisuje do Haystacku, Gateway chvilku počká (max 2 sekundy).
+    if file_record.volume_id is None:
         for _ in range(10):
-            await asyncio.sleep(0.2)
-            db.refresh(file_record)
-            if file_record.status == "ready":
-                break
-        if file_record.status != "ready":
-            raise HTTPException(status_code=425, detail="Soubor se ještě zapisuje.")
+            await asyncio.sleep(0.2)  # Počkáme 200 ms
+            db.refresh(file_record)  # Znovu načteme stav z DB
+            if file_record.volume_id is not None:
+                break  # Haystack potvrdil zápis, můžeme pokračovat!
 
+        # Pokud ani po 2 sekundách Haystack neodpověděl, teprve pak vyhodíme chybu
+        if file_record.volume_id is None:
+            raise HTTPException(
+                status_code=425,
+                detail="Soubor se ještě zapisuje na disk. Zkuste to za chvíli."
+            )
+    # --------------------------------------------
+    # 3) Stažení z Haystack Nodu (přes HTTP)
     async with httpx.AsyncClient() as client:
         haystack_url = f"http://127.0.0.1:8002/volume/{file_record.volume_id}/{file_record.offset}/{file_record.size}"
         resp = await client.get(haystack_url)
+
         if resp.status_code != 200:
-            raise HTTPException(status_code=500, detail="Chyba při čtení z Haystacku.")
+            raise HTTPException(status_code=500, detail="Chyba při čtení ze svazku v Haystacku.")
+
         file_content = resp.content
 
+    # 4) Aktualizace statistik přenosu v bucketu
     if file_record.bucket_id:
         bucket = db.query(models.Bucket).filter(models.Bucket.id == file_record.bucket_id).first()
         if bucket:
@@ -235,49 +417,172 @@ async def download_file(file_id: str, x_user_id: Optional[str] = Header(default=
                 bucket.egress_bytes += file_record.size
             db.commit()
             
-    return Response(content=file_content, media_type="application/octet-stream", headers={"Content-Disposition": f'attachment; filename="{file_record.filename}"', "X-File-Id": file_record.file_id, "X-File-Size": str(file_record.size)})
+    # 5) Vrať soubor jako HTTP response
+    return Response(
+        content=file_content,
+        media_type="application/octet-stream",  # generický binární typ
+        headers={
+            "Content-Disposition": f'attachment; filename="{file_record.filename}"',
+            "X-File-Id": file_record.file_id,
+            "X-File-Size": str(file_record.size),
+        },
+    )
 
-@app.delete("/files/{file_id}", response_model=schemas.DeleteResponse, tags=["files"])
-def delete_file(file_id: str, x_user_id: Optional[str] = Header(default="anonymous"), db: Session = Depends(get_db)):
+# ===========================================================================
+# ENDPOINT 4 – Smazání souboru
+# ===========================================================================
+@app.delete(
+    "/files/{file_id}",
+    response_model=schemas.DeleteResponse,
+    summary="Smaž soubor (Soft Delete)",
+    tags=["files"],
+)
+def delete_file(
+    file_id: str,
+    x_user_id: Optional[str] = Header(default="anonymous", description="ID uživatele"),
+    db: Session = Depends(get_db),
+):
+    """
+    **DELETE /files/{file_id}**
+
+    Provádí 'Soft Delete' souboru. Soubor zůstává na disku i v DB, 
+    ale je označen jako smazaný a nebude se zobrazovat v běžných výpisech.
+
+    - Nastaví příznak is_deleted na True
+    - Sníží zaplněné místo v bucketu (volitelné, záleží na logice aplikace)
+    - Fyzický soubor na disku ZŮSTÁVÁ pro možnost obnovy
+    """
+    # 1) Ověř existenci záznamu v DB a přístupová práva
     file_record = get_file_or_404(file_id, x_user_id, db)
-    if file_record.is_deleted:
-        return schemas.DeleteResponse(message="Již smazáno.", id=file_id)
 
+    # Kontrola, zda už soubor není smazaný (abychom neodečítali velikost vícekrát)
+    if file_record.is_deleted:
+        return schemas.DeleteResponse(
+            message="Soubor již byl smazán dříve.",
+            id=file_id,
+        )
+
+    # 2) SOFT DELETE - Místo mazání z disku a DB jen změníme příznak
     file_record.is_deleted = True
+
+    # 3) Sníž storage_bytes v bucketu
+    # (Soubor sice na disku je, ale pro uživatele je "smazaný", 
+    # takže mu uvolníme kvótu v bucketu)
     if file_record.bucket_id:
         bucket = db.query(models.Bucket).filter(models.Bucket.id == file_record.bucket_id).first()
         if bucket:
             bucket.current_storage_bytes -= file_record.size
-    db.commit()
-    return schemas.DeleteResponse(message="Soft delete proveden.", id=file_id)
 
-@app.post("/buckets/", response_model=schemas.BucketResponse, status_code=201, tags=["buckets"])
-def create_bucket(bucket_in: schemas.BucketCreate, db: Session = Depends(get_db)):
+    # 4) Uložíme změny (update místo delete)
+    db.commit()
+
+    return schemas.DeleteResponse(
+        message="Soubor byl přesunut do koše (soft delete).",
+        id=file_id,
+    )
+
+
+# ===========================================================================
+# Health check endpoint
+# ===========================================================================
+@app.get("/health", tags=["system"], summary="Stav služby")
+def health_check():
+    """
+    Jednoduchý endpoint pro ověření, že služba běží.
+    Používá se pro monitoring a load balancery.
+    """
+    return {"status": "ok", "service": "object-storage"}
+
+
+# ===========================================================================
+# ENDPOINTY PRO BUCKETY
+# ===========================================================================
+
+@app.post(
+    "/buckets/",
+    response_model=schemas.BucketResponse,
+    status_code=201,
+    summary="Vytvoř nový bucket",
+    tags=["buckets"],
+)
+def create_bucket(
+        bucket_in: schemas.BucketCreate,
+        db: Session = Depends(get_db)
+):
+    """Vytvoří nový bucket. Název musí být unikátní."""
     db_bucket = models.Bucket(name=bucket_in.name)
     db.add(db_bucket)
+
     try:
         db.commit()
         db.refresh(db_bucket)
         return db_bucket
     except IntegrityError:
+        # Odchycení chyby, pokud by unikátní název (unique=True) už existoval
         db.rollback()
-        raise HTTPException(status_code=400, detail="Bucket již existuje.")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Bucket s názvem '{bucket_in.name}' již existuje."
+        )
 
-@app.get("/buckets/{bucket_id}/objects/", response_model=schemas.FileListResponse, tags=["buckets"])
-def list_bucket_objects(bucket_id: int, db: Session = Depends(get_db)):
+@app.get(
+    "/buckets/{bucket_id}/objects/",
+    response_model=schemas.FileListResponse,
+    summary="Vypiš objekty v bucketu",
+    tags=["buckets"],
+)
+def list_bucket_objects(
+        bucket_id: int,
+        db: Session = Depends(get_db)
+):
+    """Vrátí seznam všech souborů, které patří do daného bucketu."""
+    # 1. Nejprve ověříme, zda bucket vůbec existuje
     bucket = db.query(models.Bucket).filter(models.Bucket.id == bucket_id).first()
     if not bucket:
         raise HTTPException(status_code=404, detail="Bucket nebyl nalezen.")
-    file_records = db.query(models.File).filter(models.File.bucket_id == bucket_id, models.File.is_deleted == False).order_by(models.File.created_at.desc()).all()
-    files_metadata = [schemas.FileMetadata.model_validate(f) for f in file_records]
-    return schemas.FileListResponse(files=files_metadata, total=len(files_metadata))
 
-@app.get("/buckets/{bucket_id}/billing/", response_model=schemas.BucketBillingResponse)
+    # 2. Vytáhneme všechny soubory spojené s tímto bucketem
+    file_records = (
+        db.query(models.File)
+        .filter(
+            models.File.bucket_id == bucket_id,
+            models.File.is_deleted == False  
+        )
+        .order_by(models.File.created_at.desc())
+        .all()
+    )
+
+    # Převedeme na Pydantic schémata pro odpověď (využijeme tvůj existující FileMetadata)
+    files_metadata = [
+        schemas.FileMetadata(
+            id=f.file_id,
+            user_id=f.user_id,
+            filename=f.filename,
+            size=f.size,
+            #path=f.path,
+            created_at=f.created_at,
+            volume_id=f.volume_id,  # <--- PŘIDEJ TOTO
+            offset=f.offset
+        )
+        for f in file_records
+    ]
+
+    return schemas.FileListResponse(
+        files=files_metadata,
+        total=len(files_metadata),
+    )
+
+# pridan billing bucket
+@app.get("/buckets/{bucket_id}/billing/",
+          response_model=schemas.BucketBillingResponse)
 def get_bucket_billing(bucket_id: int, db: Session = Depends(get_db)):
     bucket = db.query(models.Bucket).filter(models.Bucket.id == bucket_id).first()
     if not bucket:
         raise HTTPException(status_code=404, detail="Bucket nebyl nalezen.")
     return schemas.BucketBillingResponse(
-        bucket_id=bucket.id, current_storage_bytes=bucket.current_storage_bytes,
-        ingress_bytes=bucket.ingress_bytes, egress_bytes=bucket.egress_bytes, internal_transfer_bytes=bucket.internal_transfer_bytes
+        bucket_id=bucket.id,
+        current_storage_bytes=bucket.current_storage_bytes,
+        ingress_bytes=bucket.ingress_bytes,
+        egress_bytes=bucket.egress_bytes,
+        internal_transfer_bytes=bucket.internal_transfer_bytes
     )

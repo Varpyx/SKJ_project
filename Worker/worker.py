@@ -120,7 +120,7 @@ async def worker_loop():
                     upload_resp = await client.post(f"{S3_API_URL}/files/upload", data=upload_data, files=files,
                                                     headers=headers)
 
-                    if upload_resp.status_code not in (200, 201,202):
+                    if upload_resp.status_code not in (200, 201):
                         raise Exception(f"Nepodařilo se nahrát upravený obrázek. HTTP {upload_resp.status_code}")
 
                     # 4. Odešleme zprávu o úspěchu
@@ -139,22 +139,16 @@ async def worker_loop():
 
                 except Exception as e:
                     print(f"❌ Chyba při zpracování: {str(e)}")
-                    
-                    # Sestavení payloadu (musíme přidat file_id, aby UI vědělo, co zčervenat!)
-                    error_payload = {"status": "error", "message": str(e)}
-                    if 'file_id' in locals():
-                        error_payload["file_id"] = file_id
-                        
                     # Odešleme chybovou zprávu
                     error_msg = {
                         "action": "publish",
                         "topic": "image.done",
-                        "payload": error_payload
+                        "payload": {"status": "error", "message": str(e)}
                     }
                     await ws.send(json.dumps(error_msg))
 
                     # Potvrdíme přijetí zprávy z brokera i při chybě (ACK)
-                    if 'message_id' in locals() and message_id:
+                    if message_id:
                         ack_msg = {"action": "ack", "message_id": message_id}
                         await ws.send(json.dumps(ack_msg))
 

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>S3 Image Viewer - Pro</title>
+  <title>S3 Image Viewer</title>
   <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -36,6 +36,7 @@
       min-height: 100vh;
     }
 
+    /* --- Layout --- */
     .app { display: flex; flex-direction: column; min-height: 100vh; }
 
     header {
@@ -50,20 +51,20 @@
       z-index: 100;
     }
 
-    .logo-container { display: flex; align-items: center; gap: 12px; }
-    .logo { font-size: 15px; font-weight: 700; letter-spacing: 0.04em; color: var(--text); }
+    .logo {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--text);
+    }
     .logo span { color: var(--accent); }
-    
-    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text3); transition: background 0.3s; }
-    .status-dot.connected { background: var(--green); box-shadow: 0 0 8px var(--green); }
-    .status-dot.disconnected { background: var(--red); }
 
-    .main { display: flex; flex: 1; overflow: hidden; }
+    .main { display: flex; flex: 1; }
 
     /* --- Sidebar --- */
     .sidebar {
-      width: 280px;
-      min-width: 280px;
+      width: 260px;
+      min-width: 260px;
       background: var(--surface);
       border-right: 1px solid var(--border);
       display: flex;
@@ -73,8 +74,14 @@
       overflow-y: auto;
     }
 
-    .sidebar-section { display: flex; flex-direction: column; gap: 8px; }
-    .sidebar-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text3); }
+    .sidebar-section { display: flex; flex-direction: column; gap: 6px; }
+    .sidebar-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text3);
+    }
 
     input, select {
       background: var(--surface2);
@@ -82,13 +89,14 @@
       color: var(--text);
       font-family: var(--font);
       font-size: 12px;
-      padding: 8px 10px;
+      padding: 7px 10px;
       border-radius: 6px;
       outline: none;
       width: 100%;
       transition: border-color 0.15s;
     }
     input:focus, select:focus { border-color: var(--accent); }
+    input::placeholder { color: var(--text3); }
 
     button {
       font-family: var(--font);
@@ -96,95 +104,309 @@
       cursor: pointer;
       border: none;
       border-radius: 6px;
-      padding: 8px 12px;
+      padding: 7px 12px;
       transition: all 0.15s;
-      font-weight: 600;
     }
 
-    .btn-primary { background: var(--accent); color: #fff; margin:10px; }
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+    }
     .btn-primary:hover { background: var(--accent2); }
     .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
 
-    .btn-ghost { background: transparent; color: var(--text2); border: 1px solid var(--border2); }
+    .btn-ghost {
+      background: transparent;
+      color: var(--text2);
+      border: 1px solid var(--border2);
+    }
     .btn-ghost:hover { background: var(--surface2); color: var(--text); }
 
-    /* --- Object list --- */
-    .object-list { display: flex; flex-direction: column; gap: 4px; }
+    .btn-danger {
+      background: transparent;
+      color: var(--red);
+      border: 1px solid rgba(239,68,68,0.3);
+    }
+    .btn-danger:hover { background: rgba(239,68,68,0.1); }
+
+    /* --- Object list in sidebar --- */
+    .object-list { display: flex; flex-direction: column; gap: 2px; }
+
     .object-item {
       display: flex;
       align-items: center;
-      gap: 10px;
-      padding: 8px;
+      gap: 8px;
+      padding: 7px 8px;
       border-radius: 6px;
       cursor: pointer;
-      transition: all 0.1s;
+      transition: background 0.1s;
       border: 1px solid transparent;
     }
     .object-item:hover { background: var(--surface2); }
-    .object-item.selected { background: rgba(108,99,255,0.12); border-color: rgba(108,99,255,0.3); }
+    .object-item.selected {
+      background: rgba(108,99,255,0.12);
+      border-color: rgba(108,99,255,0.3);
+    }
 
     .object-icon {
-      width: 32px; height: 32px; border-radius: 4px;
-      background: var(--surface2); border: 1px solid var(--border);
-      overflow: hidden; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 4px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      overflow: hidden;
+      flex-shrink: 0;
     }
     .object-icon img { width: 100%; height: 100%; object-fit: cover; }
 
-    .object-name { font-size: 11px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+    .object-name {
+      font-size: 11px;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+    }
 
-    /* --- Content --- */
-    .content { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: #121217; }
-    .content-inner { flex: 1; padding: 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 24px; }
+    /* --- Content area --- */
+    .content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
 
-    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
-    .panel-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); }
-    .panel-title { font-size: 11px; font-weight: 700; color: var(--text2); letter-spacing: 0.05em; text-transform: uppercase; }
+    .content-inner {
+      flex: 1;
+      padding: 24px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* --- Image viewer --- */
+    .image-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .panel-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text2);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
 
     .image-display {
       background: repeating-conic-gradient(var(--surface2) 0% 25%, transparent 0% 50%) 0 0 / 20px 20px;
-      min-height: 400px; display: flex; align-items: center; justify-content: center; padding: 32px;
+      min-height: 300px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
     }
-    .image-display img { max-width: 100%; max-height: 550px; border-radius: 4px; box-shadow: 0 20px 40px rgba(0,0,0,0.4); }
 
-    /* --- Job Log --- */
-    .job-log { display: flex; flex-direction: column; gap: 8px; padding: 16px; }
-    .job-entry {
-      display: flex; align-items: center; gap: 12px; padding: 10px 14px;
-      background: var(--surface2); border-radius: 8px; font-size: 11px; border: 1px solid var(--border);
+    .image-display img {
+      max-width: 100%;
+      max-height: 480px;
+      border-radius: 4px;
+      object-fit: contain;
     }
-    .job-time { color: var(--text3); font-size: 10px; min-width: 65px; }
-    .job-op { color: var(--accent); font-weight: 700; min-width: 80px; }
-    .job-file { color: var(--text2); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    
+
+    .image-placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      color: var(--text3);
+    }
+
+    .image-placeholder-icon {
+      width: 56px;
+      height: 56px;
+      border: 2px dashed var(--border2);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+    }
+
+    /* --- Ops panel --- */
+    .ops-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .ops-grid {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .op-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+
+    .op-field { display: flex; flex-direction: column; gap: 4px; }
+    .op-field label { font-size: 10px; color: var(--text3); letter-spacing: 0.06em; text-transform: uppercase; }
+
+    .op-select { width: 180px; }
+    .op-num { width: 80px; }
+
+    /* --- Crop params --- */
+    .crop-params {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    /* --- Notifications --- */
+    .notifications {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 999;
+    }
+
+    .notif {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border2);
+      background: var(--surface);
+      min-width: 240px;
+      max-width: 340px;
+      animation: slideIn 0.2s ease;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+
+    @keyframes slideIn {
+      from { transform: translateX(20px); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    .notif-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .notif.success .notif-dot { background: var(--green); }
+    .notif.error .notif-dot { background: var(--red); }
+    .notif.info .notif-dot { background: var(--accent); }
+    .notif.warning .notif-dot { background: var(--yellow); }
+
+    .notif-text { font-size: 12px; color: var(--text); flex: 1; }
+
+    .notif-close {
+      cursor: pointer;
+      color: var(--text3);
+      font-size: 14px;
+      line-height: 1;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    /* --- Status badge --- */
     .badge {
-      font-size: 9px; font-weight: 800; padding: 2px 8px; border-radius: 4px; text-transform: uppercase;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 100px;
     }
     .badge.processing { background: rgba(245,158,11,0.15); color: var(--yellow); }
     .badge.done { background: rgba(34,197,94,0.15); color: var(--green); }
     .badge.error { background: rgba(239,68,68,0.15); color: var(--red); }
 
-    /* --- Notifications --- */
-    .notifications { position: fixed; bottom: 24px; right: 24px; display: flex; flex-direction: column; gap: 10px; z-index: 1000; }
-    .notif {
-      display: flex; align-items: center; gap: 12px; padding: 12px 16px;
-      border-radius: 10px; border: 1px solid var(--border2); background: var(--surface);
-      min-width: 280px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); animation: slideIn 0.3s ease;
+    /* --- Job log --- */
+    .job-log {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
     }
-    @keyframes slideIn { from { transform: translateX(30px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-    .notif-dot { width: 8px; height: 8px; border-radius: 50%; }
-    .notif.success .notif-dot { background: var(--green); }
-    .notif.error .notif-dot { background: var(--red); }
-    .notif-text { font-size: 12px; flex: 1; }
 
+    .job-entry {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      background: var(--surface2);
+      border-radius: 6px;
+      font-size: 11px;
+    }
+
+    .job-time { color: var(--text3); font-size: 10px; min-width: 60px; }
+    .job-name { color: var(--text2); flex: 1; }
+    .job-op { color: var(--accent); font-weight: 700; }
+
+    /* --- Empty state --- */
+    .empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 48px 24px;
+      color: var(--text3);
+      text-align: center;
+    }
+    .empty-icon { font-size: 32px; }
+
+    /* Spinner */
     .spinner {
-      width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.1);
-      border-top-color: currentColor; border-radius: 50%; animation: spin 0.6s linear infinite;
-      display: inline-block; vertical-align: middle; margin-right: 6px;
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid var(--border2);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+    .text-muted { color: var(--text2); }
+    .text-small { font-size: 11px; }
+    .flex { display: flex; }
+    .gap-8 { gap: 8px; }
+    .items-center { align-items: center; }
+    .w-full { width: 100%; }
+    .mt-8 { margin-top: 8px; }
+
+    /* Mobile hint */
+    @media (max-width: 700px) {
+      .sidebar { width: 200px; min-width: 200px; }
+    }
   </style>
 </head>
 <body>
@@ -193,6 +415,10 @@
 <script type="text/babel">
 const { useState, useEffect, useCallback, useRef } = React;
 
+// ─── Config defaults ───────────────────────────────────────────────
+const DEFAULT_BASE = "http://127.0.0.1:8001";
+
+// ─── Operations ────────────────────────────────────────────────────
 const OPERATIONS = [
   { value: "grayscale",   label: "Grayscale",          params: [] },
   { value: "invert",      label: "Inverze barev",       params: [] },
@@ -206,30 +432,46 @@ const OPERATIONS = [
   ]},
 ];
 
+// ─── Tiny notification system ───────────────────────────────────────
+let _notifId = 0;
+function Notifications({ notifs, remove }) {
+  return (
+    <div className="notifications">
+      {notifs.map(n => (
+        <div key={n.id} className={`notif ${n.type}`}>
+          <div className="notif-dot" />
+          <div className="notif-text">{n.msg}</div>
+          <button className="notif-close" onClick={() => remove(n.id)}>✕</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Main App ───────────────────────────────────────────────────────
 function App() {
-  const [baseUrl, setBaseUrl]     = useState("http://127.0.0.1:8001");
+  const [baseUrl, setBaseUrl]     = useState(DEFAULT_BASE);
   const [userId, setUserId]       = useState("anonymous");
   const [bucketId, setBucketId]   = useState("");
   const [objects, setObjects]     = useState([]);
+  const [loading, setLoading]     = useState(false);
   const [selectedObj, setSelectedObj] = useState(null);
+  const [imageUrl, setImageUrl]   = useState(null);
   const [operation, setOperation] = useState("grayscale");
   const [opParams, setOpParams]   = useState({});
+  const [submitting, setSubmitting] = useState(false);
   const [jobs, setJobs]           = useState([]);
   const [notifs, setNotifs]       = useState([]);
-  const [connected, setConnected] = useState(false);
-  const [loading, setLoading]     = useState(false);
-  const [uploading, setUploading] = useState(false);
-
-  const wsRef = useRef(null);
-  const fileInputRef = useRef(null);
 
   const notify = useCallback((msg, type = "info") => {
-    const id = Date.now();
-    setNotifs(prev => [...prev, { id, msg, type }]);
-    setTimeout(() => setNotifs(prev => prev.filter(n => n.id !== id)), 5000);
+    const id = ++_notifId;
+    setNotifs(n => [...n, { id, msg, type }]);
+    setTimeout(() => setNotifs(n => n.filter(x => x.id !== id)), 4500);
   }, []);
 
-  // ── Nastavení výchozích parametrů při změně operace ──
+  const removeNotif = useCallback((id) => setNotifs(n => n.filter(x => x.id !== id)), []);
+
+  // Reset params when operation changes
   useEffect(() => {
     const op = OPERATIONS.find(o => o.value === operation);
     if (op) {
@@ -239,144 +481,56 @@ function App() {
     }
   }, [operation]);
 
-  // ── WebSocket Logic ──
+  // Load image URL when object selected
   useEffect(() => {
-    const connectWS = () => {
-      const ws = new WebSocket("ws://localhost:8000/broker");
-      wsRef.current = ws;
+    if (!selectedObj || !bucketId) { setImageUrl(null); return; }
+    setImageUrl(`${baseUrl}/files/${selectedObj.id || selectedObj.name}`);
+  }, [selectedObj, bucketId, baseUrl]);
 
-      ws.onopen = () => {
-        setConnected(true);
-        // Odebíráme POUZE zprávy od workera, nikoliv storage.ack, abychom zprávu neukradli Gatewayi!
-        ws.send(JSON.stringify({ action: "subscribe", topic: "image.done" }));
-      };
-
-      ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.action !== "deliver") return;
-
-        const payload = data.payload;
-        const topic = data.topic;
-
-        // --- Zpracování výsledku úpravy (Worker) ---
-        if (topic === "image.done") {
-          setJobs(prev => prev.map(job => {
-            if (job.fileId === payload.file_id || job.id.toString() === payload.job_id) {
-              return { ...job, status: payload.status === "success" ? "done" : "error" };
-            }
-            return job;
-          }));
-          
-          if (payload.status === "success") {
-            notify(`Operace ${payload.operation} dokončena`, "success");
-            fetchObjects(); 
-          } else {
-            notify(`Chyba operace: ${payload.message}`, "error");
-          }
-        }
-        
-        ws.send(JSON.stringify({ action: "ack", message_id: data.message_id }));
-      };
-
-      ws.onclose = () => {
-        setConnected(false);
-        setTimeout(connectWS, 3000); 
-      };
-    };
-
-    connectWS();
-    return () => wsRef.current?.close();
-  }, [bucketId]); 
-
-  // ── API Actions ──
+  // ── Fetch objects ──
   const fetchObjects = async () => {
-    if (!bucketId) return;
+    if (!bucketId.trim()) { notify("Zadej ID bucketu", "warning"); return; }
     setLoading(true);
+    setObjects([]);
+    setSelectedObj(null);
     try {
-      const res = await fetch(`${baseUrl}/buckets/${bucketId}/objects/`, { headers: { "x-user-id": userId } });
+      const res = await fetch(`${baseUrl}/buckets/${bucketId}/objects/`, {
+        headers: { "x-user-id": userId }
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setObjects(data.files || []);
+      // Support both array and {objects:[...]} response shapes
+      const list = Array.isArray(data) ? data : (data.files || data.objects || data.items || []);
+      setObjects(list);
+      notify(`Načteno ${list.length} objektů`, "success");
     } catch (e) {
-      notify("Chyba při načítání objektů", "error");
+      notify(`Chyba při načítání: ${e.message}`, "error");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file || !bucketId) return;
-
-    setUploading(true);
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("bucket_id", bucketId);
-
-    const jobId = Date.now();
-    
-    // Přidání uploadu do historie IHNED
-    setJobs(prev => [{
-      id: jobId,
-      time: new Date().toLocaleTimeString(),
-      op: "upload",
-      fileId: null, 
-      fileName: file.name,
-      status: "processing"
-    }, ...prev].slice(0, 15));
-
+  // ── Submit job ──
+  const submitJob = async () => {
+    if (!selectedObj) { notify("Vyber objekt", "warning"); return; }
+    setSubmitting(true);
+    const objId = selectedObj.id || selectedObj.name;
+    const body = { operation, params: opParams };
     try {
-      const res = await fetch(`${baseUrl}/files/upload`, {
-        method: "POST",
-        headers: { "x-user-id": userId },
-        body: formData
-      });
-      
-      const data = await res.json();
-      if (!res.ok) throw new Error();
-      notify("Odesláno na Gateway, čekám na zápis na disk...", "info");
-
-      // Spoléháme na lokální rychlost Haystacku (zápis v milisekundách).
-      // Záměrně počkáme 1,5 sekundy, aby Gateway bezpečně zpracovala storage.ack,
-      // pak job označíme jako hotový a stáhneme obnovený seznam.
-      setTimeout(() => {
-        setJobs(prev => prev.map(j => j.id === jobId ? { ...j, fileId: data.id, status: "done" } : j));
-        fetchObjects();
-        notify("Soubor úspěšně zapsán do Haystacku", "success");
-      }, 1500);
-
-    } catch (e) {
-      notify("Chyba při nahrávání", "error");
-      setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: "error" } : j));
-    } finally {
-      setUploading(false);
-      e.target.value = null;
-    }
-  };
-
-  const processImage = async () => {
-    if (!selectedObj) return;
-    const jobId = Date.now();
-    const payload = { operation, params: opParams };
-    
-    setJobs(prev => [{
-      id: jobId,
-      time: new Date().toLocaleTimeString(),
-      op: operation,
-      fileId: selectedObj.file_id || selectedObj.id, // Fallback pro file_id/id
-      fileName: selectedObj.filename,
-      status: "processing"
-    }, ...prev].slice(0, 15));
-
-    try {
-      const res = await fetch(`${baseUrl}/buckets/${bucketId}/objects/${selectedObj.file_id || selectedObj.id}/process`, {
+      const res = await fetch(`${baseUrl}/buckets/${bucketId}/objects/${objId}/process`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-user-id": userId },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
+      const time = new Date().toLocaleTimeString("cs");
+      setJobs(j => [{ id: Date.now(), time, objId, op: operation, status: "processing", data }, ...j.slice(0,19)]);
+      notify(`Job odeslán: ${operation} → ${objId}`, "success");
     } catch (e) {
-      setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: "error" } : j));
-      notify("Nepodařilo se odeslat job", "error");
+      notify(`Chyba: ${e.message}`, "error");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -385,95 +539,197 @@ function App() {
   return (
     <div className="app">
       <header>
-        <div className="logo-container">
-          <div className={`status-dot ${connected ? 'connected' : 'disconnected'}`} title={connected ? "Broker připojen" : "Broker odpojen"} />
-          <div className="logo">S3<span>_</span>Viewer<span>.pro</span></div>
-        </div>
+        <div className="logo">S3<span>_</span>viewer</div>
         <div className="flex gap-8 items-center">
-          <span className="text-muted text-small">API:</span>
-          <input value={baseUrl} onChange={e => setBaseUrl(e.target.value)} style={{ width: 180 }} />
-          <span className="text-muted text-small">User:</span>
-          <input value={userId} onChange={e => setUserId(e.target.value)} style={{ width: 100 }} />
+          <span className="text-muted text-small">gateway:</span>
+          <input
+            value={baseUrl}
+            onChange={e => setBaseUrl(e.target.value.replace(/\/$/, ""))}
+            style={{ width: 200 }}
+            placeholder="http://127.0.0.1:8001"
+          />
+          <span className="text-muted text-small">x-user-id:</span>
+          <input
+            value={userId}
+            onChange={e => setUserId(e.target.value)}
+            style={{ width: 120 }}
+            placeholder="anonymous"
+          />
         </div>
       </header>
 
       <div className="main">
+        {/* Sidebar */}
         <aside className="sidebar">
           <div className="sidebar-section">
-            <div className="sidebar-label">Úložiště</div>
-            <input value={bucketId} onChange={e => setBucketId(e.target.value)} placeholder="ID Bucketů" />
-            <div className="flex gap-8">
-              <button className="btn-primary" style={{ flex: 1, margin: "10px 0 0 0" }} onClick={fetchObjects} disabled={loading}>
-                {loading ? <span className="spinner" /> : "Obnovit"}
-              </button>
-              <button className="btn-ghost" style={{ flex: 1, margin: "10px 0 0 0" }} onClick={() => fileInputRef.current.click()} disabled={uploading}>
-                {uploading ? <span className="spinner" /> : "Nahrát"}
-              </button>
-            </div>
-            <input type="file" ref={fileInputRef} style={{ display: "none" }} onChange={handleUpload} />
+            <div className="sidebar-label">Bucket</div>
+            <input
+              value={bucketId}
+              onChange={e => setBucketId(e.target.value)}
+              placeholder="bucket-id"
+              onKeyDown={e => e.key === "Enter" && fetchObjects()}
+            />
+            <button className="btn-primary" onClick={fetchObjects} disabled={loading}>
+              {loading ? <span className="spinner" /> : "Načíst objekty"}
+            </button>
           </div>
 
           <div className="sidebar-section" style={{ flex: 1 }}>
-            <div className="sidebar-label">Objekty ({objects.length})</div>
+            <div className="sidebar-label">
+              Objekty {objects.length > 0 && `(${objects.length})`}
+            </div>
             <div className="object-list">
-              {objects.map(obj => (
-                <div key={obj.id} className={`object-item ${(selectedObj?.file_id || selectedObj?.id) === (obj.file_id || obj.id) ? 'selected' : ''}`} onClick={() => setSelectedObj(obj)}>
-                  <div className="object-icon">
-                    {/\.(jpg|jpeg|png|webp)$/i.test(obj.filename) 
-                      ? <img src={`${baseUrl}/files/${obj.file_id || obj.id}`} onError={e => e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23556' stroke-width='2'/%3E%3C/svg%3E"} />
-                      : "📄"}
-                  </div>
-                  <span className="object-name">{obj.filename}</span>
+              {objects.length === 0 && !loading && (
+                <div style={{ color: "var(--text3)", fontSize: 11, padding: "8px 0" }}>
+                  Žádné objekty
                 </div>
-              ))}
+              )}
+              {objects.map((obj, i) => {
+                const name = obj.name || obj.key || obj.id || `object-${i}`;
+                const id   = obj.id || obj.key || obj.name;
+                const isImg = /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(name);
+                return (
+                  <div
+                    key={id || i}
+                    className={`object-item${selectedObj === obj ? " selected" : ""}`}
+                    onClick={() => setSelectedObj(obj)}
+                  >
+                    <div className="object-icon">
+                      {isImg ? (
+                        <img
+                          src={`${baseUrl}/files/${id}`}
+                          alt=""
+                          onError={e => { e.target.style.display = "none"; }}
+                        />
+                      ) : (
+                        <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100%", fontSize:11, color:"var(--text3)" }}>
+                          📄
+                        </div>
+                      )}
+                    </div>
+                    <span className="object-name" title={name}>{name}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </aside>
 
-        <main className="content">
+        {/* Main content */}
+        <div className="content">
           <div className="content-inner">
-            <div className="panel">
+
+            {/* Image viewer */}
+            <div className="image-panel">
               <div className="panel-header">
-                <span className="panel-title">{selectedObj ? selectedObj.filename : "Vyberte soubor"}</span>
-                {selectedObj && <span className="text-muted text-small">{ (selectedObj.size / 1024).toFixed(1) } KB</span>}
-              </div>
-              <div className="image-display">
-                {selectedObj ? (
-                  <img src={`${baseUrl}/files/${selectedObj.file_id || selectedObj.id}?t=${Date.now()}`} key={selectedObj.file_id || selectedObj.id} alt="preview" />
-                ) : (
-                  <div style={{ color: "var(--text3)" }}>Není vybrán žádný náhled</div>
+                <span className="panel-title">
+                  {selectedObj
+                    ? (selectedObj.name || selectedObj.key || selectedObj.id)
+                    : "Náhled"}
+                </span>
+                {selectedObj && (
+                  <div className="flex gap-8 items-center">
+                    <span className="text-small text-muted">
+                      {selectedObj.size ? `${(selectedObj.size/1024).toFixed(1)} KB` : ""}
+                    </span>
+                    <a
+                      href={imageUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: "var(--accent)", fontSize: 11, textDecoration: "none" }}
+                    >
+                      ↗ otevřít
+                    </a>
+                  </div>
                 )}
+              </div>
+
+              <div className="image-display">
+                {imageUrl ? (
+                  <img
+                    src={imageUrl}
+                    alt={selectedObj?.name}
+                    key={imageUrl}
+                    onError={e => {
+                      e.target.style.display = "none";
+                      e.target.nextSibling.style.display = "flex";
+                    }}
+                  />
+                ) : null}
+                <div className="image-placeholder" style={{ display: imageUrl ? "none" : "flex" }}>
+                  <div className="image-placeholder-icon">🖼</div>
+                  <span>Vyber objekt ze seznamu vlevo</span>
+                </div>
               </div>
             </div>
 
-            <div className="panel">
-              <div className="panel-header"><span className="panel-title">Nástroje zpracování</span></div>
-              <div className="job-log">
-                <div className="flex gap-8 items-end">
-                  <div className="sidebar-section" style={{ flex: 1 }}>
-                    <div className="sidebar-label">Operace</div>
-                    <select value={operation} onChange={e => setOperation(e.target.value)}>
-                      {OPERATIONS.map(op => <option key={op.value} value={op.value}>{op.label}</option>)}
+            {/* Processing panel */}
+            <div className="ops-panel">
+              <div className="panel-header">
+                <span className="panel-title">Zpracování obrázku</span>
+                {selectedObj && (
+                  <span className="text-muted text-small">
+                    → {selectedObj.name || selectedObj.key || selectedObj.id}
+                  </span>
+                )}
+              </div>
+              <div className="ops-grid">
+                <div className="op-row">
+                  <div className="op-field">
+                    <label>Operace</label>
+                    <select
+                      className="op-select"
+                      value={operation}
+                      onChange={e => setOperation(e.target.value)}
+                    >
+                      {OPERATIONS.map(op => (
+                        <option key={op.value} value={op.value}>{op.label}</option>
+                      ))}
                     </select>
                   </div>
-                  <button className="btn-primary" onClick={processImage} disabled={!selectedObj} style={{ height: 35, padding: "0 24px", margin: "0" }}>
-                    Spustit Job
-                  </button>
+
+                  {/* Dynamic params */}
+                  {currentOp?.params.length === 1 && (
+                    <div className="op-field">
+                      <label>{currentOp.params[0].label}</label>
+                      <input
+                        type="number"
+                        className="op-num"
+                        value={opParams[currentOp.params[0].name] ?? currentOp.params[0].default}
+                        min={currentOp.params[0].min}
+                        max={currentOp.params[0].max}
+                        onChange={e => setOpParams(p => ({ ...p, [currentOp.params[0].name]: Number(e.target.value) }))}
+                      />
+                    </div>
+                  )}
+
+                  <div className="op-field" style={{ marginLeft: "auto" }}>
+                    <label>&nbsp;</label>
+                    <button
+                      className="btn-primary"
+                      onClick={submitJob}
+                      disabled={submitting || !selectedObj}
+                      style={{ minWidth: 120 }}
+                    >
+                      {submitting ? <><span className="spinner" /> Odesílám…</> : "▶ Zpracovat"}
+                    </button>
+                  </div>
                 </div>
 
-                {/* ── Přidané dynamické parametry operací ── */}
-                {currentOp && currentOp.params.length > 0 && (
-                  <div className="sidebar-section" style={{ marginTop: '12px' }}>
-                    <div className="sidebar-label">Parametry (Jas / Ořez)</div>
-                    <div className="flex gap-8" style={{ flexWrap: 'wrap' }}>
+                {/* Crop params */}
+                {operation === "crop" && (
+                  <div>
+                    <label style={{ fontSize:10, color:"var(--text3)", letterSpacing:"0.06em", textTransform:"uppercase" }}>
+                      Parametry ořezu (px)
+                    </label>
+                    <div className="crop-params mt-8">
                       {currentOp.params.map(p => (
-                        <div key={p.name} style={{ flex: 1, minWidth: '90px' }}>
-                          <label style={{ fontSize: '10px', color: 'var(--text2)', display: 'block', marginBottom: '4px' }}>{p.label}</label>
+                        <div className="op-field" key={p.name}>
+                          <label>{p.label}</label>
                           <input
                             type="number"
                             value={opParams[p.name] ?? p.default}
                             min={p.min}
-                            max={p.max}
                             onChange={e => setOpParams(prev => ({ ...prev, [p.name]: Number(e.target.value) }))}
                           />
                         </div>
@@ -481,41 +737,65 @@ function App() {
                     </div>
                   </div>
                 )}
+
+                {/* Request preview */}
+                <div style={{
+                  background: "var(--surface2)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 6,
+                  padding: "8px 12px",
+                  fontSize: 11,
+                  color: "var(--text3)",
+                  fontFamily: "inherit",
+                }}>
+                  <span style={{ color: "var(--yellow)" }}>POST</span>
+                  <span style={{ color: "var(--text2)", marginLeft: 8 }}>
+                    /buckets/<span style={{ color: "var(--accent)" }}>{bucketId || "…"}</span>
+                    /objects/<span style={{ color: "var(--accent)" }}>
+                      {selectedObj ? (selectedObj.id || selectedObj.name) : "…"}
+                    </span>/process
+                  </span>
+                  <span style={{ color: "var(--text3)", marginLeft: 12 }}>
+                    {JSON.stringify({ operation, params: opParams })}
+                  </span>
+                </div>
               </div>
             </div>
 
-            <div className="panel">
-              <div className="panel-header"><span className="panel-title">Historie událostí</span></div>
-              <div className="job-log">
-                {jobs.length === 0 && <div className="text-muted text-small" style={{ textAlign: "center" }}>Zatím žádné události</div>}
-                {jobs.map(job => (
-                  <div key={job.id} className="job-entry">
-                    <span className="job-time">{job.time}</span>
-                    <span className="job-op">{job.op}</span>
-                    <span className="job-file">{job.fileName}</span>
-                    <span className={`badge ${job.status}`}>{job.status}</span>
+            {/* Job log */}
+            {jobs.length > 0 && (
+              <div className="ops-panel">
+                <div className="panel-header">
+                  <span className="panel-title">Historie jobů</span>
+                  <button className="btn-ghost" style={{ fontSize: 10, padding: "4px 8px" }} onClick={() => setJobs([])}>
+                    Vymazat
+                  </button>
+                </div>
+                <div style={{ padding: 12 }}>
+                  <div className="job-log">
+                    {jobs.map(j => (
+                      <div className="job-entry" key={j.id}>
+                        <span className="job-time">{j.time}</span>
+                        <span className="job-op">{j.op}</span>
+                        <span className="job-name">{j.objId}</span>
+                        <span className="badge processing">processing_started</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                </div>
               </div>
-            </div>
+            )}
+
           </div>
-        </main>
+        </div>
       </div>
 
-      <div className="notifications">
-        {notifs.map(n => (
-          <div key={n.id} className={`notif ${n.type}`}>
-            <div className="notif-dot" />
-            <span className="notif-text">{n.msg}</span>
-          </div>
-        ))}
-      </div>
+      <Notifications notifs={notifs} remove={removeNotif} />
     </div>
   );
 }
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(<App />);
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 </script>
 </body>
 </html>
