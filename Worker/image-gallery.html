@@ -481,11 +481,75 @@ function App() {
     }
   }, [operation]);
 
-  // Load image URL when object selected
+  // 1. Změna z větve broker_test (Načtení URL obrázku)
   useEffect(() => {
     if (!selectedObj || !bucketId) { setImageUrl(null); return; }
     setImageUrl(`${baseUrl}/download/${selectedObj.id || selectedObj.name}`);
   }, [selectedObj, bucketId, baseUrl]);
+
+  // 2. Změna z větve main (WebSocket pro naslouchání Image Workerovi)
+  useEffect(() => {
+    const connectWS = () => {
+      const ws = new WebSocket("ws://localhost:8000/broker");
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        setConnected(true);
+        // Odebíráme POUZE zprávy od workera, nikoliv storage.ack, abychom zprávu neukradli Gatewayi!
+        ws.send(JSON.stringify({ action: "subscribe", topic: "image.done" }));
+      };
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.action !== "deliver") return;
+
+        const payload = data.payload;
+        const topic = data.topic;
+
+        // --- Zpracování výsledku úpravy (Worker) ---
+        if (topic === "image.done") {
+          setJobs(prev => prev.map(job => {
+            if (job.fileId === payload.file_id || job.id.toString() === payload.job_id) {
+              return { ...job, status: payload.status === "success" ? "done" : "error" };
+            }
+            return job;
+          }));
+          
+          if (payload.status === "success") {
+            notify(`Operace ${payload.operation} dokončena`, "success");
+            fetchObjects(); 
+          } else {
+            notify(`Chyba operace: ${payload.message}`, "error");
+          }
+        }
+        
+        ws.send(JSON.stringify({ action: "ack", message_id: data.message_id }));
+      };
+
+      ws.onclose = () => {
+        setConnected(false);
+        setTimeout(connectWS, 3000); 
+      };
+    };
+
+    connectWS();
+    return () => wsRef.current?.close();
+  }, [bucketId]); 
+
+  // ── API Actions ──
+  const fetchObjects = async () => {
+    if (!bucketId) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`${baseUrl}/buckets/${bucketId}/objects/`, { headers: { "x-user-id": userId } });
+      const data = await res.json();
+      setObjects(data.files || []);
+    } catch (e) {
+      notify("Chyba při načítání objektů", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // ── Fetch objects ──
   const fetchObjects = async () => {
