@@ -302,7 +302,7 @@ def delete_file(
 
     # Kontrola, zda už soubor není smazaný (abychom neodečítali velikost vícekrát)
     if file_record.is_deleted:
-        return schemas.DeleteResponse(message="Již smazáno.", id=file_id)
+        return schemas.DeleteResponse(message="Již smazáno.", id=object_id)
 
     file_record.is_deleted = True
     if file_record.bucket_id:
@@ -310,7 +310,7 @@ def delete_file(
         if bucket:
             bucket.current_storage_bytes -= file_record.size
     db.commit()
-    return schemas.DeleteResponse(message="Soft delete proveden.", id=file_id)
+    return schemas.DeleteResponse(message="Soft delete proveden.", id=object_id)
 
 @app.post("/buckets/", response_model=schemas.BucketResponse, status_code=201, tags=["buckets"])
 def create_bucket(bucket_in: schemas.BucketCreate, db: Session = Depends(get_db)):
