@@ -371,11 +371,25 @@ def get_volume_objects(volume_id: int, db: Session = Depends(get_db)):
 
 
 @app.put("/admin/objects/{file_id}/relocate", tags=["admin"])
-def relocate_object(file_id: str, new_offset: int, db: Session = Depends(get_db)):
-    """Aktualizuje offset souboru po kompakci."""
+def relocate_object(file_id: str, new_offset: int, new_volume_id: Optional[int] = None, db: Session = Depends(get_db)):
+    """Aktualizuje offset (a případně volume_id) souboru po kompakci."""
     file_record = db.query(models.File).filter(models.File.file_id == file_id).first()
     if not file_record:
         raise HTTPException(status_code=404, detail="Soubor nenalezen.")
     file_record.offset = new_offset
+    if new_volume_id is not None:
+        file_record.volume_id = new_volume_id
     db.commit()
     return {"status": "ok"}
+
+
+@app.delete("/admin/volume/{volume_id}/purge", tags=["admin"])
+def purge_soft_deleted(volume_id: int, db: Session = Depends(get_db)):
+    """Smaže z DB záznamy soft-deleted souborů v daném svazku po kompakci."""
+    count = (
+        db.query(models.File)
+        .filter(models.File.volume_id == volume_id, models.File.is_deleted == True)
+        .delete()
+    )
+    db.commit()
+    return {"purged_count": count}

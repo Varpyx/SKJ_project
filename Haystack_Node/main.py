@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from haystack import HaystackManager
 
 BROKER_URI = "ws://127.0.0.1:8000/broker"
-manager = HaystackManager(storage_dir="volumes", max_size_mb=100)
+manager = HaystackManager(storage_dir="volumes", max_size_mb=3)
 
 async def broker_listener():
     """Tato funkce běží na pozadí a naslouchá zprávám z brokera."""
